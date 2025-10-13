@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Help Center - AmarThikana</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.1/css/all.min.css">
+
+    <!-- Main CSS -->
+    <link rel="stylesheet" href="css/style.css">
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    
+    <style>
+        /* Help Center Specific Styles */
+        .help-hero {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+            padding: 120px 0 80px;
+            text-align: center;
+            color: white;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .help-hero::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 320"><path fill="rgba(255,255,255,0.1)" d="M0,96L48,112C96,128,192,160,288,160C384,160,480,128,576,122.7C672,117,768,139,864,154.7C960,171,1056,181,1152,165.3C1248,149,1344,107,1392,85.3L1440,64L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z"></path></svg>') no-repeat bottom;
+            background-size: cover;
+            opacity: 0.3;
+        }
+
+        .help-hero-content {
+            position: relative;
+            z-index: 1;
+        }
+
+        .help-hero h1 {
+            font-size: 3.5rem;
+            margin-bottom: 1rem;
+            font-weight: 700;
+        }
+
+        .help-hero p {
+            font-size: 1.3rem;
+            margin-bottom: 2.5rem;
+            opacity: 0.95;
+        }
+
+        .help-search {
+            max-width: 700px;
+            margin: 0 auto;
+            position: relative;
+        }
+
+        .help-search input {
+            width: 100%;
+            padding: 20px 60px 20px 25px;
+            border: none;
+            border-radius: 50px;
+            font-size: 1.1rem;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+
+        .help-search input:focus {
+            outline: none;
+            box-shadow: 0 10px 50px rgba(0,0,0,0.3);
+        }
+
+        .help-search button {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .help-search button:hover {
+            background: var(--secondary-color);
+            transform: translateY(-50%) scale(1.05);
+        }
+
+        .help-categories-section {
+            padding: 80px 0;
+        }
+
+        .help-categories {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 30px;
+            margin-bottom: 60px;
+        }
+
+        .help-category-card {
+            background: white;
+            padding: 40px 30px;
+            border-radius: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.4s;
+            border: 2px solid #f0f0f0;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.05);
+        }
+
+        .help-category-card:hover {
+            border-color: var(--primary-color);
+            transform: translateY(-10px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.15);
+        }
+
+        .help-category-card .icon-wrapper {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 20px;
+            background: linear-gradient(135deg, rgba(22, 160, 133, 0.1) 0%, rgba(41, 128, 185, 0.1) 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .help-category-card i {
+            font-size: 2.5rem;
+            color: var(--primary-color);
+        }
+
+        .help-category-card h3 {
+            font-size: 1.4rem;
+            margin-bottom: 12px;
+            color: var(--text-color);
+        }
+
+        .help-category-card p {
+            color: #777;
+            line-height: 1.6;
+        }
+
+        .help-category-card .article-count {
+            display: inline-block;
+            margin-top: 15px;
+            padding: 8px 20px;
+            background: #f8f8f8;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            color: #555;
+            font-weight: 600;
+        }
+
+        .popular-articles {
+            background: #f9f9f9;
+            padding: 80px 0;
+        }
+
+        .articles-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 25px;
+        }
+
+        .article-card {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            border-left: 4px solid var(--primary-color);
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        .article-card:hover {
+            transform: translateX(5px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        .article-card h4 {
+            font-size: 1.2rem;
+            margin-bottom: 12px;
+            color: var(--text-color);
+        }
+
+        .article-card p {
+            color: #666;
+            line-height: 1.7;
+            margin-bottom: 15px;
+        }
+
+        .article-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.85rem;
+            color: #999;
+        }
+
+        .article-meta .views {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .contact-support {
+            padding: 80px 0;
+        }
+
+        .support-options {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+        }
+
+        .support-card {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            text-align: center;
+            box-shadow: 0 5px 25px rgba(0,0,0,0.08);
+            transition: all 0.3s;
+        }
+
+        .support-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+        }
+
+        .support-card .icon {
+            width: 70px;
+            height: 70px;
+            margin: 0 auto 20px;
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 2rem;
+        }
+
+        .support-card h3 {
+            font-size: 1.4rem;
+            margin-bottom: 12px;
+            color: var(--text-color);
+        }
+
+        .support-card p {
+            color: #666;
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+
+        .support-card .contact-info {
+            font-weight: 600;
+            color: var(--primary-color);
+            margin-bottom: 20px;
+        }
+
+        .support-card .btn {
+            padding: 12px 30px;
+        }
+
+        .video-tutorials {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            padding: 80px 0;
+        }
+
+        .video-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 30px;
+        }
+
+        .video-card {
+            background: white;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+            transition: all 0.3s;
+        }
+
+        .video-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+        }
+
+        .video-thumbnail {
+            position: relative;
+            padding-bottom: 56.25%;
+            background: #ddd;
+            overflow: hidden;
+        }
+
+        .video-thumbnail img {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .play-button {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 70px;
+            height: 70px;
+            background: rgba(22, 160, 133, 0.9);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .play-button:hover {
+            background: var(--secondary-color);
+            transform: translate(-50%, -50%) scale(1.1);
+        }
+
+        .video-info {
+            padding: 20px;
+        }
+
+        .video-info h4 {
+            font-size: 1.1rem;
+            margin-bottom: 8px;
+            color: var(--text-color);
+        }
+
+        .video-info p {
+            color: #777;
+            font-size: 0.9rem;
+        }
+
+        .video-duration {
+            display: inline-block;
+            margin-top: 10px;
+            padding: 4px 12px;
+            background: #f0f0f0;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            color: #555;
+        }
+
+        .feedback-section {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+            padding: 60px 0;
+            text-align: center;
+            color: white;
+        }
+
+        .feedback-section h2 {
+            font-size: 2.5rem;
+            margin-bottom: 15px;
+        }
+
+        .feedback-section p {
+            font-size: 1.1rem;
+            margin-bottom: 30px;
+            opacity: 0.9;
+        }
+
+        .feedback-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .feedback-btn {
+            background: white;
+            color: var(--primary-color);
+            padding: 15px 40px;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            transition: all 0.3s;
+            border: 2px solid white;
+        }
+
+        .feedback-btn:hover {
+            background: transparent;
+            color: white;
+            transform: translateY(-3px);
+        }
+
+        @media (max-width: 768px) {
+            .help-hero h1 {
+                font-size: 2.2rem;
+            }
+
+            .help-hero p {
+                font-size: 1.1rem;
+            }
+
+            .help-categories {
+                grid-template-columns: 1fr;
+            }
+
+            .articles-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .support-options {
+                grid-template-columns: 1fr;
+            }
+
+            .video-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .feedback-buttons {
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <!-- Header Placeholder -->
+    <div id="header-placeholder"></div>
+
+    <!-- Help Hero Section -->
+    <section class="help-hero">
+        <div class="container help-hero-content">
+            <h1>How Can We Help You?</h1>
+            <p>Search our knowledge base or browse categories below</p>
+            
+            <div class="help-search">
+                <input type="text" id="helpSearchInput" placeholder="Search for answers...">
+                <button type="button"><i class="fas fa-search"></i></button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Help Categories Section -->
+    <section class="help-categories-section">
+        <div class="container">
+            <h2 class="section-title">Browse by Category</h2>
+            <p class="section-subtitle">Find answers organized by topic</p>
+            
+            <div class="help-categories">
+                <div class="help-category-card">
+                    <div class="icon-wrapper">
+                        <i class="fas fa-user-circle"></i>
+                    </div>
+                    <h3>Getting Started</h3>
+                    <p>Learn the basics of using AmarThikana to find your perfect rental home</p>
+                    <span class="article-count">15 Articles</span>
+                </div>
+
+                <div class="help-category-card">
+                    <div class="icon-wrapper">
+                        <i class="fas fa-search"></i>
+                    </div>
+                    <h3>Searching & Filtering</h3>
+                    <p>Master our advanced search tools to find exactly what you need</p>
+                    <span class="article-count">12 Articles</span>
+                </div>
+
+                <div class="help-category-card">
+                    <div class="icon-wrapper">
+                        <i class="fas fa-file-contract"></i>
+                    </div>
+                    <h3>Applications & Leases</h3>
+                    <p>Everything about rental applications and lease agreements</p>
+                    <span class="article-count">18 Articles</span>
+                </div>
+
+                <div class="help-category-card">
+                    <div class="icon-wrapper">
+                        <i class="fas fa-credit-card"></i>
+                    </div>
+                    <h3>Payments & Billing</h3>
+                    <p>Guide to rent payments, fees, and security deposits</p>
+                    <span class="article-count">10 Articles</span>
+                </div>
+
+                <div class="help-category-card">
+                    <div class="icon-wrapper">
+                        <i class="fas fa-building"></i>
+                    </div>
+                    <h3>For Landlords</h3>
+                    <p>Help with listing properties and managing tenants</p>
+                    <span class="article-count">20 Articles</span>
+                </div>
+
+                <div class="help-category-card">
+                    <div class="icon-wrapper">
+                        <i class="fas fa-shield-alt"></i>
+                    </div>
+                    <h3>Safety & Security</h3>
+                    <p>Learn how we keep your information and transactions safe</p>
+                    <span class="article-count">8 Articles</span>
+                </div>
+
+                <div class="help-category-card">
+                    <div class="icon-wrapper">
+                        <i class="fas fa-cog"></i>
+                    </div>
+                    <h3>Account Settings</h3>
+                    <p>Manage your profile, preferences, and notifications</p>
+                    <span class="article-count">14 Articles</span>
+                </div>
+
+                <div class="help-category-card">
+                    <div class="icon-wrapper">
+                        <i class="fas fa-question-circle"></i>
+                    </div>
+                    <h3>Troubleshooting</h3>
+                    <p>Solutions to common issues and technical problems</p>
+                    <span class="article-count">16 Articles</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Popular Articles Section -->
+    <section class="popular-articles">
+        <div class="container">
+            <h2 class="section-title">Popular Help Articles</h2>
+            <p class="section-subtitle">Most viewed articles by our community</p>
+            
+            <div class="articles-grid">
+                <div class="article-card">
+                    <h4>How do I create an account?</h4>
+                    <p>Step-by-step guide to registering on AmarThikana and setting up your profile...</p>
+                    <div class="article-meta">
+                        <span class="views"><i class="fas fa-eye"></i> 2.5k views</span>
+                        <a href="#" style="color: var(--primary-color); font-weight: 600;">Read More →</a>
+                    </div>
+                </div>
+
+                <div class="article-card">
+                    <h4>How to apply for a rental property?</h4>
+                    <p>Complete walkthrough of the application process from viewing to approval...</p>
+                    <div class="article-meta">
+                        <span class="views"><i class="fas fa-eye"></i> 3.1k views</span>
+                        <a href="#" style="color: var(--primary-color); font-weight: 600;">Read More →</a>
+                    </div>
+                </div>
+
+                <div class="article-card">
+                    <h4>What documents do I need to rent?</h4>
+                    <p>List of required documents for successful rental applications...</p>
+                    <div class="article-meta">
+                        <span class="views"><i class="fas fa-eye"></i> 2.8k views</span>
+                        <a href="#" style="color: var(--primary-color); font-weight: 600;">Read More →</a>
+                    </div>
+                </div>
+
+                <div class="article-card">
+                    <h4>How to schedule a property tour?</h4>
+                    <p>Guide to booking virtual and in-person property viewings...</p>
+                    <div class="article-meta">
+                        <span class="views"><i class="fas fa-eye"></i> 1.9k views</span>
+                        <a href="#" style="color: var(--primary-color); font-weight: 600;">Read More →</a>
+                    </div>
+                </div>
+
+                <div class="article-card">
+                    <h4>Understanding security deposits</h4>
+                    <p>Everything you need to know about deposits and refund policies...</p>
+                    <div class="article-meta">
+                        <span class="views"><i class="fas fa-eye"></i> 2.2k views</span>
+                        <a href="#" style="color: var(--primary-color); font-weight: 600;">Read More →</a>
+                    </div>
+                </div>
+
+                <div class="article-card">
+                    <h4>How to list a property as a landlord?</h4>
+                    <p>Complete guide to creating and publishing your rental listing...</p>
+                    <div class="article-meta">
+                        <span class="views"><i class="fas fa-eye"></i> 1.7k views</span>
+                        <a href="#" style="color: var(--primary-color); font-weight: 600;">Read More →</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Video Tutorials Section -->
+    <section class="video-tutorials">
+        <div class="container">
+            <h2 class="section-title">Video Tutorials</h2>
+            <p class="section-subtitle">Watch step-by-step guides to get started quickly</p>
+            
+            <div class="video-grid">
+                <div class="video-card">
+                    <div class="video-thumbnail">
+                        <img src="https://images.pexels.com/photos/5668858/pexels-photo-5668858.jpeg?auto=compress&cs=tinysrgb&w=600" alt="Video Tutorial">
+                        <div class="play-button">
+                            <i class="fas fa-play"></i>
+                        </div>
+                    </div>
+                    <div class="video-info">
+                        <h4>Getting Started with AmarThikana</h4>
+                        <p>Learn how to navigate the platform and find your dream rental</p>
+                        <span class="video-duration"><i class="fas fa-clock"></i> 5:30</span>
+                    </div>
+                </div>
+
+                <div class="video-card">
+                    <div class="video-thumbnail">
+                        <img src="https://images.pexels.com/photos/7413915/pexels-photo-7413915.jpeg?auto=compress&cs=tinysrgb&w=600" alt="Video Tutorial">
+                        <div class="play-button">
+                            <i class="fas fa-play"></i>
+                        </div>
+                    </div>
+                    <div class="video-info">
+                        <h4>How to Apply for a Property</h4>
+                        <p>Complete walkthrough of the rental application process</p>
+                        <span class="video-duration"><i class="fas fa-clock"></i> 7:45</span>
+                    </div>
+                </div>
+
+                <div class="video-card">
+                    <div class="video-thumbnail">
+                        <img src="https://images.pexels.com/photos/4458554/pexels-photo-4458554.jpeg?auto=compress&cs=tinysrgb&w=600" alt="Video Tutorial">
+                        <div class="play-button">
+                            <i class="fas fa-play"></i>
+                        </div>
+                    </div>
+                    <div class="video-info">
+                        <h4>Landlord's Guide to Listing</h4>
+                        <p>How to create an attractive and effective property listing</p>
+                        <span class="video-duration"><i class="fas fa-clock"></i> 6:20</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Contact Support Section -->
+    <section class="contact-support">
+        <div class="container">
+            <h2 class="section-title">Still Need Help?</h2>
+            <p class="section-subtitle">Our support team is here for you 24/7</p>
+            
+            <div class="support-options">
+                <div class="support-card">
+                    <div class="icon">
+                        <i class="fas fa-comments"></i>
+                    </div>
+                    <h3>Live Chat</h3>
+                    <p>Chat with our support team in real-time for instant assistance</p>
+                    <p class="contact-info">Average response: 2 minutes</p>
+                    <a href="#" class="btn btn-primary">Start Chat</a>
+                </div>
+
+                <div class="support-card">
+                    <div class="icon">
+                        <i class="fas fa-envelope"></i>
+                    </div>
+                    <h3>Email Support</h3>
+                    <p>Send us a detailed message and we'll get back to you soon</p>
+                    <p class="contact-info">support@amarthikana.com</p>
+                    <a href="mailto:support@amarthikana.com" class="btn btn-primary">Send Email</a>
+                </div>
+
+                <div class="support-card">
+                    <div class="icon">
+                        <i class="fas fa-phone"></i>
+                    </div>
+                    <h3>Phone Support</h3>
+                    <p>Speak directly with a support representative for urgent issues</p>
+                    <p class="contact-info">+880 1712-345678</p>
+                    <a href="tel:+8801712345678" class="btn btn-primary">Call Now</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Feedback Section -->
+    <section class="feedback-section">
+        <div class="container">
+            <h2>Was This Helpful?</h2>
+            <p>Your feedback helps us improve our help center</p>
+            <div class="feedback-buttons">
+                <a href="#" class="feedback-btn">
+                    <i class="fas fa-thumbs-up"></i> Yes, Very Helpful
+                </a>
+                <a href="#" class="feedback-btn">
+                    <i class="fas fa-thumbs-down"></i> No, Needs Improvement
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <!-- Footer Placeholder -->
+    <div id="footer-placeholder"></div>
+
+    <!-- Scripts -->
+    <script src="js/loader.js"></script>
+    <script src="js/script.js"></script>
+    <script>
+        // Help Search functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            const searchInput = document.getElementById('helpSearchInput');
+            
+            searchInput.addEventListener('input', (e) => {
+                const searchTerm = e.target.value.toLowerCase();
+                const articleCards = document.querySelectorAll('.article-card');
+                
+                articleCards.forEach(card => {
+                    const title = card.querySelector('h4').textContent.toLowerCase();
+                    const content = card.querySelector('p').textContent.toLowerCase();
+                    
+                    if (title.includes(searchTerm) || content.includes(searchTerm)) {
+                        card.style.display = 'block';
+                    } else {
+                        card.style.display = searchTerm === '' ? 'block' : 'none';
+                    }
+                });
+            });
+
+            // Category card click handler
+            const categoryCards = document.querySelectorAll('.help-category-card');
+            categoryCards.forEach(card => {
+                card.addEventListener('click', function() {
+                    // Scroll to articles section
+                    document.querySelector('.popular-articles').scrollIntoView({ 
+                        behavior: 'smooth' 
+                    });
+                });
+            });
+
+            // Video play button handler
+            const playButtons = document.querySelectorAll('.play-button');
+            playButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    alert('Video player would open here');
+                    // In production, you would open a modal with the video player
+                });
+            });
+        });
+    </script>
+</body>
+</html>
