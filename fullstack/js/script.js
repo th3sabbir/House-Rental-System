@@ -106,3 +106,5 @@ document.querySelectorAll('.search-form select').forEach(function(select) {
     }
 
 });
+
+

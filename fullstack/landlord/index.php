@@ -1,3 +1,136 @@
+<?php
+session_start();
+
+// Prevent browser caching
+header("Cache-Control: no-cache, no-store, must-revalidate");
+header("Pragma: no-cache");
+header("Expires: 0");
+
+// Check if user is logged in
+if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
+    header('Location: /house_rental/login.php');
+    exit();
+}
+
+// Check if user is landlord
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'landlord') {
+    header('Location: /house_rental/index.php');
+    exit();
+}
+
+// Include database connection
+require_once '../config/database.php';
+require_once '../includes/auth.php';
+
+// Initialize database connection
+$db = new Database();
+$pdo = $db->connect();
+global $pdo; // Make $pdo available globally for helper functions
+
+$auth = new Auth();
+$conn = $pdo; // Use $pdo for consistency
+
+// Get user info
+$user_id = $_SESSION['user_id'];
+$user = getUserById($user_id);
+$landlord_name = $user['full_name'] ?? 'Landlord';
+$landlord_email = $_SESSION['email'] ?? '';
+$landlord_username = $_SESSION['username'] ?? '';
+
+// Get user data for form population
+$user_email = $user['email'] ?? '';
+$user_phone = $user['phone'] ?? '';
+$user_date_of_birth = $user['date_of_birth'] ?? '';
+$user_address = $user['address'] ?? '';
+$user_city = $user['city'] ?? '';
+$user_postal_code = $user['postal_code'] ?? '';
+
+// Parse name into first and last name
+$name_parts = explode(' ', $landlord_name, 2);
+$first_name = $name_parts[0] ?? '';
+$last_name = $name_parts[1] ?? '';
+
+// Generate profile image URL
+if (!empty($user['profile_image']) && file_exists('../uploads/' . $user['profile_image'])) {
+    $profile_image_url = '../uploads/' . $user['profile_image'];
+} else {
+    // Use UI Avatars as fallback
+    $profile_image_url = 'https://ui-avatars.com/api/?name=' . urlencode($landlord_name) . '&background=1abc9c&color=fff&size=160';
+}
+
+// Get dashboard statistics
+try {
+    // Active listings count
+    $stmt = $conn->prepare("SELECT COUNT(*) as count FROM properties WHERE landlord_id = ? AND status = 'available'");
+    $stmt->execute([$user_id]);
+    $active_listings = $stmt->fetch()['count'];
+
+    // Total bookings count
+    $stmt = $conn->prepare("
+        SELECT COUNT(*) as count FROM bookings b 
+        JOIN properties p ON b.property_id = p.property_id 
+        WHERE p.landlord_id = ?
+    ");
+    $stmt->execute([$user_id]);
+    $total_bookings = $stmt->fetch()['count'];
+
+    // Pending requests count
+    $stmt = $conn->prepare("
+        SELECT COUNT(*) as count FROM bookings b 
+        JOIN properties p ON b.property_id = p.property_id 
+        WHERE p.landlord_id = ? AND b.status = 'pending'
+    ");
+    $stmt->execute([$user_id]);
+    $pending_requests = $stmt->fetch()['count'];
+
+    // Average rating
+    $stmt = $conn->prepare("
+        SELECT AVG(r.rating) as avg_rating FROM reviews r 
+        JOIN properties p ON r.property_id = p.property_id 
+        WHERE p.landlord_id = ?
+    ");
+    $stmt->execute([$user_id]);
+    $avg_rating = round($stmt->fetch()['avg_rating'] ?? 0, 1);
+
+    // Get recent properties for dashboard
+    $stmt = $conn->prepare("
+        SELECT p.*, 
+               (SELECT image_path FROM property_images WHERE property_id = p.property_id AND is_primary = 1 LIMIT 1) as main_image,
+               (SELECT COUNT(*) FROM bookings WHERE property_id = p.property_id) as booking_count,
+               (SELECT AVG(rating) FROM reviews WHERE property_id = p.property_id) as rating
+        FROM properties p 
+        WHERE p.landlord_id = ? 
+        ORDER BY p.created_at DESC 
+        LIMIT 6
+    ");
+    $stmt->execute([$user_id]);
+    $properties = $stmt->fetchAll();
+
+    // Get recent bookings
+    $stmt = $conn->prepare("
+        SELECT b.*, p.title as property_title, p.address, u.full_name as tenant_name, u.email as tenant_email, u.phone as tenant_phone,
+               (SELECT image_path FROM property_images WHERE property_id = p.property_id AND is_primary = 1 LIMIT 1) as property_image,
+               u.profile_image as tenant_image
+        FROM bookings b 
+        JOIN properties p ON b.property_id = p.property_id 
+        JOIN users u ON b.tenant_id = u.user_id 
+        WHERE p.landlord_id = ? 
+        ORDER BY b.created_at DESC 
+        LIMIT 10
+    ");
+    $stmt->execute([$user_id]);
+    $recent_bookings = $stmt->fetchAll();
+
+} catch (PDOException $e) {
+    error_log("Dashboard data loading error: " . $e->getMessage());
+    $active_listings = 0;
+    $total_bookings = 0;
+    $pending_requests = 0;
+    $avg_rating = 0;
+    $properties = [];
+    $recent_bookings = [];
+}
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1614,6 +1747,56 @@ body {
     .header-actions .btn {
         width: 100%;
     }
+
+    /* Form Responsiveness */
+    .settings-container {
+        padding: 25px;
+        max-width: none;
+        margin: 0 15px;
+    }
+
+    .profile-picture-upload {
+        gap: 20px;
+    }
+
+    .profile-picture-upload img {
+        width: 110px;
+        height: 110px;
+    }
+
+    /* Modal Responsiveness */
+    .modal {
+        width: 95%;
+        max-height: 90vh;
+    }
+
+    .modal-header,
+    .modal-body,
+    .modal-footer {
+        padding: 20px;
+    }
+
+    .modal-header h2 {
+        font-size: 1.4rem;
+    }
+
+    /* Dashboard Layout */
+    .dashboard-content {
+        padding: 20px;
+    }
+
+    .content-header h1 {
+        font-size: 1.8rem;
+    }
+
+    /* Property Cards */
+    .property-card {
+        margin-bottom: 20px;
+    }
+
+    .property-card-content {
+        padding: 18px;
+    }
 }
 
 @media (max-width: 576px) {
@@ -1641,6 +1824,160 @@ body {
     .property-card {
         padding: 15px;
     }
+
+    /* Form Responsiveness */
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+        font-size: 16px; /* Prevents zoom on iOS */
+        padding: 12px 15px;
+    }
+
+    .form-section {
+        margin-bottom: 25px;
+    }
+
+    .form-section-title {
+        font-size: 1.1rem;
+        margin-bottom: 15px;
+    }
+
+    /* Profile Settings */
+    .settings-container {
+        padding: 20px;
+        margin: 0 10px;
+    }
+
+    .profile-picture-upload {
+        flex-direction: column;
+        text-align: center;
+        gap: 15px;
+    }
+
+    .profile-picture-upload img {
+        width: 100px;
+        height: 100px;
+    }
+
+    /* Modal Improvements */
+    .modal {
+        width: 100%;
+        height: 100vh;
+        max-height: 100vh;
+        border-radius: 0;
+        margin: 0;
+    }
+
+    .modal-header {
+        padding: 15px 20px;
+    }
+
+    .modal-header h2 {
+        font-size: 1.2rem;
+    }
+
+    .modal-body {
+        padding: 15px 20px;
+        overflow-y: auto;
+        max-height: calc(100vh - 140px);
+    }
+
+    .modal-footer {
+        padding: 15px 20px;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .modal-footer .btn {
+        width: 100%;
+        min-width: auto;
+    }
+
+    /* Dashboard Content */
+    .dashboard-content {
+        padding: 15px;
+    }
+
+    .content-header h1 {
+        font-size: 1.4rem;
+    }
+
+    /* Property Cards */
+    .property-card-content {
+        padding: 15px;
+    }
+
+    .property-card-title {
+        font-size: 1.1rem;
+    }
+
+    /* Table Responsiveness */
+    .data-table {
+        font-size: 0.8rem;
+    }
+
+    .data-table th,
+    .data-table td {
+        padding: 8px 6px;
+    }
+}
+
+/* Extra Small Devices */
+@media (max-width: 480px) {
+    .modal {
+        width: 100%;
+        height: 100vh;
+        max-height: 100vh;
+        border-radius: 0;
+        margin: 0;
+    }
+
+    .modal-header {
+        padding: 15px;
+    }
+
+    .modal-header h2 {
+        font-size: 1.2rem;
+    }
+
+    .modal-body {
+        padding: 15px;
+        max-height: calc(100vh - 120px);
+    }
+
+    .modal-footer {
+        padding: 15px;
+    }
+
+    .dashboard-content {
+        padding: 10px;
+    }
+
+    .content-header h1 {
+        font-size: 1.3rem;
+    }
+
+    .settings-container {
+        padding: 15px;
+        margin: 0 5px;
+    }
+
+    .stat-card {
+        padding: 15px;
+    }
+
+    .btn {
+        padding: 10px 15px;
+        font-size: 0.85rem;
+    }
+
+    .mobile-menu-toggle {
+        width: 45px !important;
+        height: 45px !important;
+        font-size: 18px !important;
+        bottom: 10px !important;
+        right: 10px !important;
+    }
 }
     </style>
 </head>
@@ -1653,8 +1990,8 @@ body {
             <!-- Sidebar -->
             <aside class="sidebar" id="landlordSidebar">
                 <div class="sidebar-profile">
-                    <img src="https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=160&h=150&dpr=1" alt="Sophia">
-                    <h3>Sophia Martinez</h3>
+                    <img src="<?php echo htmlspecialchars($profile_image_url); ?>" alt="<?php echo htmlspecialchars($landlord_name); ?>">
+                    <h3><?php echo htmlspecialchars($landlord_name); ?></h3>
                     <p>Property Owner</p>
                 </div>
                 <ul class="sidebar-nav">
@@ -1685,7 +2022,7 @@ body {
                         <div class="stat-card">
                             <div class="stat-card-header">
                                 <div>
-                                    <div class="stat-value">8</div>
+                                    <div class="stat-value"><?php echo $active_listings; ?></div>
                                     <div class="stat-label">Active Listings</div>
                                 </div>
                                 <div class="stat-icon primary">
@@ -1693,14 +2030,14 @@ body {
                                 </div>
                             </div>
                             <div class="stat-change positive">
-                                <i class="fas fa-arrow-up"></i> 2 new this month
+                                <i class="fas fa-arrow-up"></i> Keep it up!
                             </div>
                         </div>
 
                         <div class="stat-card">
                             <div class="stat-card-header">
                                 <div>
-                                    <div class="stat-value">25</div>
+                                    <div class="stat-value"><?php echo $total_bookings; ?></div>
                                     <div class="stat-label">Total Bookings</div>
                                 </div>
                                 <div class="stat-icon success">
@@ -1708,14 +2045,14 @@ body {
                                 </div>
                             </div>
                             <div class="stat-change positive">
-                                <i class="fas fa-arrow-up"></i> +15% from last month
+                                <i class="fas fa-arrow-up"></i> Great performance
                             </div>
                         </div>
 
                         <div class="stat-card">
                             <div class="stat-card-header">
                                 <div>
-                                    <div class="stat-value">5</div>
+                                    <div class="stat-value"><?php echo $pending_requests; ?></div>
                                     <div class="stat-label">Pending Requests</div>
                                 </div>
                                 <div class="stat-icon warning">
@@ -1723,14 +2060,14 @@ body {
                                 </div>
                             </div>
                             <div class="stat-change">
-                                Needs your attention
+                                <?php echo $pending_requests > 0 ? 'Needs your attention' : 'All caught up'; ?>
                             </div>
                         </div>
 
                         <div class="stat-card">
                             <div class="stat-card-header">
                                 <div>
-                                    <div class="stat-value">4.8</div>
+                                    <div class="stat-value"><?php echo $avg_rating > 0 ? $avg_rating : 'N/A'; ?></div>
                                     <div class="stat-label">Average Rating</div>
                                 </div>
                                 <div class="stat-icon info">
@@ -1738,7 +2075,7 @@ body {
                                 </div>
                             </div>
                             <div class="stat-change positive">
-                                <i class="fas fa-arrow-up"></i> Excellent performance
+                                <i class="fas fa-arrow-up"></i> <?php echo $avg_rating >= 4.5 ? 'Excellent' : 'Good'; ?>
                             </div>
                         </div>
                     </div>
@@ -1749,162 +2086,71 @@ body {
                     </div>
 
                     <div class="dashboard-grid">
+                        <?php if (empty($properties)): ?>
+                        <div class="empty-state">
+                            <i class="fas fa-building"></i>
+                            <h3>No Properties Yet</h3>
+                            <p>You haven't added any properties yet. Start by adding your first listing!</p>
+                            <a href="#" class="btn btn-primary" onclick="openAddListingModal(); return false;">
+                                <i class="fas fa-plus"></i> Add Your First Property
+                            </a>
+                        </div>
+                        <?php else: ?>
+                        <?php foreach ($properties as $property): ?>
                         <div class="property-card">
                             <div class="card-image">
-                                <img src="https://images.pexels.com/photos/186077/pexels-photo-186077.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1" alt="Cozy Apartment">
-                                <span class="card-badge active">Active</span>
+                                <img src="<?php echo $property['main_image'] ? '../uploads/' . $property['main_image'] : 'https://via.placeholder.com/400x250?text=No+Image'; ?>" 
+                                     alt="<?php echo htmlspecialchars($property['title']); ?>">
+                                <span class="card-badge <?php echo $property['status'] === 'available' ? 'active' : 'inactive'; ?>">
+                                    <?php echo ucfirst($property['status']); ?>
+                                </span>
                             </div>
                             <div class="card-content">
-                                <h3>Cozy Apartment in Downtown</h3>
+                                <h3><?php echo htmlspecialchars($property['title']); ?></h3>
                                 <div class="card-stats">
                                     <span class="card-stat">
-                                        <i class="fas fa-calendar-check"></i> 12 Bookings
+                                        <i class="fas fa-calendar-check"></i> <?php echo $property['booking_count']; ?> Bookings
                                     </span>
                                     <span class="card-stat">
-                                        <i class="fas fa-star"></i> 4.9
+                                        <i class="fas fa-star"></i> <?php echo $property['rating'] ? number_format($property['rating'], 1) : 'N/A'; ?>
                                     </span>
                                 </div>
                                 <div class="card-actions">
                                     <button class="btn btn-secondary" onclick="openPropertyEditModal({
-                                        id: 1,
-                                        name: 'Cozy Apartment in Downtown',
-                                        address: '123 Main Street, Downtown, NY 10001',
-                                        type: 'Apartment',
-                                        status: 'Active',
-                                        price: 150,
-                                        bedrooms: 2,
-                                        bathrooms: 1,
-                                        guests: 4,
-                                        description: 'A beautiful and cozy apartment located in the heart of downtown. Perfect for business travelers and tourists alike.',
-                                        amenities: ['WiFi', 'Air Conditioning', 'Kitchen']
+                                        id: <?php echo $property['property_id']; ?>,
+                                        name: '<?php echo addslashes(htmlspecialchars($property['title'])); ?>',
+                                        address: '<?php echo addslashes(htmlspecialchars($property['address'])); ?>',
+                                        type: '<?php echo addslashes(htmlspecialchars($property['property_type'])); ?>',
+                                        status: '<?php echo addslashes(htmlspecialchars($property['status'])); ?>',
+                                        price: <?php echo $property['price_per_month']; ?>,
+                                        bedrooms: <?php echo $property['bedrooms'] ?? 0; ?>,
+                                        bathrooms: <?php echo $property['bathrooms'] ?? 0; ?>,
+                                        guests: <?php echo $property['area_sqft'] ?? 0; ?>,
+                                        description: '<?php echo addslashes(htmlspecialchars($property['description'])); ?>'
                                     })">
                                         <i class="fas fa-edit"></i> Edit
                                     </button>
                                     <button class="btn btn-primary" onclick="openPropertyViewModal({
-                                        image: 'https://images.pexels.com/photos/186077/pexels-photo-186077.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-                                        name: 'Cozy Apartment in Downtown',
-                                        address: '123 Main Street, Downtown, NY 10001',
-                                        type: 'Apartment',
-                                        status: 'Active',
-                                        price: '$150',
-                                        rating: '4.9 ⭐',
-                                        bedrooms: 2,
-                                        bathrooms: 1,
-                                        guests: 4,
-                                        bookings: 12,
-                                        description: 'A beautiful and cozy apartment located in the heart of downtown. Perfect for business travelers and tourists alike. Features modern amenities and stunning city views.',
-                                        amenities: ['WiFi', 'Air Conditioning', 'Kitchen']
+                                        image: '<?php echo $property['main_image'] ? '../uploads/' . $property['main_image'] : 'https://via.placeholder.com/400x250?text=No+Image'; ?>',
+                                        name: '<?php echo addslashes(htmlspecialchars($property['title'])); ?>',
+                                        address: '<?php echo addslashes(htmlspecialchars($property['address'])); ?>',
+                                        type: '<?php echo addslashes(htmlspecialchars($property['property_type'])); ?>',
+                                        status: '<?php echo addslashes(htmlspecialchars($property['status'])); ?>',
+                                        price: '$<?php echo number_format($property['price_per_month']); ?>',
+                                        rating: '<?php echo $property['rating'] ? number_format($property['rating'], 1) . ' ⭐' : 'N/A'; ?>',
+                                        bedrooms: <?php echo $property['bedrooms'] ?? 0; ?>,
+                                        bathrooms: <?php echo $property['bathrooms'] ?? 0; ?>,
+                                        guests: <?php echo $property['area_sqft'] ?? 0; ?>,
+                                        bookings: <?php echo $property['booking_count']; ?>,
+                                        description: '<?php echo addslashes(htmlspecialchars($property['description'])); ?>'
                                     })">
                                         <i class="fas fa-eye"></i> View
                                     </button>
                                 </div>
                             </div>
                         </div>
-
-                        <div class="property-card">
-                            <div class="card-image">
-                                <img src="https://images.pexels.com/photos/1396122/pexels-photo-1396122.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1" alt="Beachfront Villa">
-                                <span class="card-badge inactive">Inactive</span>
-                            </div>
-                            <div class="card-content">
-                                <h3>Beachfront Villa</h3>
-                                <div class="card-stats">
-                                    <span class="card-stat">
-                                        <i class="fas fa-calendar-check"></i> 5 Bookings
-                                    </span>
-                                    <span class="card-stat">
-                                        <i class="fas fa-star"></i> 4.7
-                                    </span>
-                                </div>
-                                <div class="card-actions">
-                                    <button class="btn btn-secondary" onclick="openPropertyEditModal({
-                                        id: 2,
-                                        name: 'Beachfront Villa',
-                                        address: '456 Ocean Drive, Miami Beach, FL 33139',
-                                        type: 'Villa',
-                                        status: 'Inactive',
-                                        price: 250,
-                                        bedrooms: 4,
-                                        bathrooms: 3,
-                                        guests: 8,
-                                        description: 'Luxurious beachfront villa with private beach access and stunning ocean views. Perfect for families and groups.',
-                                        amenities: ['WiFi', 'Pool', 'Parking', 'Kitchen']
-                                    })">
-                                        <i class="fas fa-edit"></i> Edit
-                                    </button>
-                                    <button class="btn btn-primary" onclick="openPropertyViewModal({
-                                        image: 'https://images.pexels.com/photos/1396122/pexels-photo-1396122.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-                                        name: 'Beachfront Villa',
-                                        address: '456 Ocean Drive, Miami Beach, FL 33139',
-                                        type: 'Villa',
-                                        status: 'Inactive',
-                                        price: '$250',
-                                        rating: '4.7 ⭐',
-                                        bedrooms: 4,
-                                        bathrooms: 3,
-                                        guests: 8,
-                                        bookings: 5,
-                                        description: 'Luxurious beachfront villa with private beach access and stunning ocean views. Perfect for families and groups seeking a tropical paradise.',
-                                        amenities: ['WiFi', 'Pool', 'Parking', 'Kitchen']
-                                    })">
-                                        <i class="fas fa-eye"></i> View
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="property-card">
-                            <div class="card-image">
-                                <img src="https://images.pexels.com/photos/209274/pexels-photo-209274.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1" alt="Mountain Cabin">
-                                <span class="card-badge active">Active</span>
-                            </div>
-                            <div class="card-content">
-                                <h3>Mountain Cabin Retreat</h3>
-                                <div class="card-stats">
-                                    <span class="card-stat">
-                                        <i class="fas fa-calendar-check"></i> 8 Bookings
-                                    </span>
-                                    <span class="card-stat">
-                                        <i class="fas fa-star"></i> 5.0
-                                    </span>
-                                </div>
-                                <div class="card-actions">
-                                    <button class="btn btn-secondary" onclick="openPropertyEditModal({
-                                        id: 3,
-                                        name: 'Mountain Cabin Retreat',
-                                        address: '789 Mountain Road, Aspen, CO 81611',
-                                        type: 'Cabin',
-                                        status: 'Active',
-                                        price: 180,
-                                        bedrooms: 3,
-                                        bathrooms: 2,
-                                        guests: 6,
-                                        description: 'Charming mountain cabin nestled in the woods. Perfect for nature lovers and those seeking peace and tranquility.',
-                                        amenities: ['WiFi', 'Parking', 'Kitchen', 'Air Conditioning']
-                                    })">
-                                        <i class="fas fa-edit"></i> Edit
-                                    </button>
-                                    <button class="btn btn-primary" onclick="openPropertyViewModal({
-                                        image: 'https://images.pexels.com/photos/209274/pexels-photo-209274.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-                                        name: 'Mountain Cabin Retreat',
-                                        address: '789 Mountain Road, Aspen, CO 81611',
-                                        type: 'Cabin',
-                                        status: 'Active',
-                                        price: '$180',
-                                        rating: '5.0 ⭐',
-                                        bedrooms: 3,
-                                        bathrooms: 2,
-                                        guests: 6,
-                                        bookings: 8,
-                                        description: 'Charming mountain cabin nestled in the woods. Perfect for nature lovers and those seeking peace and tranquility. Features rustic decor and modern comforts.',
-                                        amenities: ['WiFi', 'Parking', 'Kitchen', 'Air Conditioning']
-                                    })">
-                                        <i class="fas fa-eye"></i> View
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    
+                        <?php endforeach; ?>
+                        <?php endif; ?>
                     </div>
                 </section>
 
@@ -1923,161 +2169,71 @@ body {
                     </div>
 
                     <div class="dashboard-grid">
+                        <?php if (empty($properties)): ?>
+                        <div class="empty-state">
+                            <i class="fas fa-building"></i>
+                            <h3>No Properties Yet</h3>
+                            <p>You haven't added any properties yet. Start by adding your first listing!</p>
+                            <a href="#" class="btn btn-primary" onclick="openAddListingModal(); return false;">
+                                <i class="fas fa-plus"></i> Add Your First Property
+                            </a>
+                        </div>
+                        <?php else: ?>
+                        <?php foreach ($properties as $property): ?>
                         <div class="property-card">
                             <div class="card-image">
-                                <img src="https://images.pexels.com/photos/186077/pexels-photo-186077.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1" alt="Cozy Apartment">
-                                <span class="card-badge active">Active</span>
+                                <img src="<?php echo $property['main_image'] ? '../uploads/' . $property['main_image'] : 'https://via.placeholder.com/400x250?text=No+Image'; ?>" 
+                                     alt="<?php echo htmlspecialchars($property['title']); ?>">
+                                <span class="card-badge <?php echo $property['status'] === 'available' ? 'active' : 'inactive'; ?>">
+                                    <?php echo ucfirst($property['status']); ?>
+                                </span>
                             </div>
                             <div class="card-content">
-                                <h3>Cozy Apartment in Downtown</h3>
+                                <h3><?php echo htmlspecialchars($property['title']); ?></h3>
                                 <div class="card-stats">
                                     <span class="card-stat">
-                                        <i class="fas fa-calendar-check"></i> 12 Bookings
+                                        <i class="fas fa-calendar-check"></i> <?php echo $property['booking_count']; ?> Bookings
                                     </span>
                                     <span class="card-stat">
-                                        <i class="fas fa-star"></i> 4.9
+                                        <i class="fas fa-star"></i> <?php echo $property['rating'] ? number_format($property['rating'], 1) : 'N/A'; ?>
                                     </span>
                                 </div>
                                 <div class="card-actions">
                                     <button class="btn btn-secondary" onclick="openPropertyEditModal({
-                                        id: 1,
-                                        name: 'Cozy Apartment in Downtown',
-                                        address: '123 Main Street, Downtown, NY 10001',
-                                        type: 'Apartment',
-                                        status: 'Active',
-                                        price: 150,
-                                        bedrooms: 2,
-                                        bathrooms: 1,
-                                        guests: 4,
-                                        description: 'A beautiful and cozy apartment located in the heart of downtown. Perfect for business travelers and tourists alike.',
-                                        amenities: ['WiFi', 'Air Conditioning', 'Kitchen']
+                                        id: <?php echo $property['property_id']; ?>,
+                                        name: '<?php echo addslashes(htmlspecialchars($property['title'])); ?>',
+                                        address: '<?php echo addslashes(htmlspecialchars($property['address'])); ?>',
+                                        type: '<?php echo addslashes(htmlspecialchars($property['property_type'])); ?>',
+                                        status: '<?php echo addslashes(htmlspecialchars($property['status'])); ?>',
+                                        price: <?php echo $property['price_per_month']; ?>,
+                                        bedrooms: <?php echo $property['bedrooms'] ?? 0; ?>,
+                                        bathrooms: <?php echo $property['bathrooms'] ?? 0; ?>,
+                                        guests: <?php echo $property['area_sqft'] ?? 0; ?>,
+                                        description: '<?php echo addslashes(htmlspecialchars($property['description'])); ?>'
                                     })">
                                         <i class="fas fa-edit"></i> Edit
                                     </button>
                                     <button class="btn btn-primary" onclick="openPropertyViewModal({
-                                        image: 'https://images.pexels.com/photos/186077/pexels-photo-186077.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-                                        name: 'Cozy Apartment in Downtown',
-                                        address: '123 Main Street, Downtown, NY 10001',
-                                        type: 'Apartment',
-                                        status: 'Active',
-                                        price: '$150',
-                                        rating: '4.9 ⭐',
-                                        bedrooms: 2,
-                                        bathrooms: 1,
-                                        guests: 4,
-                                        bookings: 12,
-                                        description: 'A beautiful and cozy apartment located in the heart of downtown. Perfect for business travelers and tourists alike. Features modern amenities and stunning city views.',
-                                        amenities: ['WiFi', 'Air Conditioning', 'Kitchen']
+                                        image: '<?php echo $property['main_image'] ? '../uploads/' . $property['main_image'] : 'https://via.placeholder.com/400x250?text=No+Image'; ?>',
+                                        name: '<?php echo addslashes(htmlspecialchars($property['title'])); ?>',
+                                        address: '<?php echo addslashes(htmlspecialchars($property['address'])); ?>',
+                                        type: '<?php echo addslashes(htmlspecialchars($property['property_type'])); ?>',
+                                        status: '<?php echo addslashes(htmlspecialchars($property['status'])); ?>',
+                                        price: '$<?php echo number_format($property['price_per_month']); ?>',
+                                        rating: '<?php echo $property['rating'] ? number_format($property['rating'], 1) . ' ⭐' : 'N/A'; ?>',
+                                        bedrooms: <?php echo $property['bedrooms'] ?? 0; ?>,
+                                        bathrooms: <?php echo $property['bathrooms'] ?? 0; ?>,
+                                        guests: <?php echo $property['area_sqft'] ?? 0; ?>,
+                                        bookings: <?php echo $property['booking_count']; ?>,
+                                        description: '<?php echo addslashes(htmlspecialchars($property['description'])); ?>'
                                     })">
                                         <i class="fas fa-eye"></i> View
                                     </button>
                                 </div>
                             </div>
                         </div>
-
-                        <div class="property-card">
-                            <div class="card-image">
-                                <img src="https://images.pexels.com/photos/1396122/pexels-photo-1396122.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1" alt="Beachfront Villa">
-                                <span class="card-badge inactive">Inactive</span>
-                            </div>
-                            <div class="card-content">
-                                <h3>Beachfront Villa</h3>
-                                <div class="card-stats">
-                                    <span class="card-stat">
-                                        <i class="fas fa-calendar-check"></i> 5 Bookings
-                                    </span>
-                                    <span class="card-stat">
-                                        <i class="fas fa-star"></i> 4.7
-                                    </span>
-                                </div>
-                                <div class="card-actions">
-                                    <button class="btn btn-secondary" onclick="openPropertyEditModal({
-                                        id: 2,
-                                        name: 'Beachfront Villa',
-                                        address: '456 Ocean Drive, Miami Beach, FL 33139',
-                                        type: 'Villa',
-                                        status: 'Inactive',
-                                        price: 250,
-                                        bedrooms: 4,
-                                        bathrooms: 3,
-                                        guests: 8,
-                                        description: 'Luxurious beachfront villa with private beach access and stunning ocean views. Perfect for families and groups.',
-                                        amenities: ['WiFi', 'Pool', 'Parking', 'Kitchen']
-                                    })">
-                                        <i class="fas fa-edit"></i> Edit
-                                    </button>
-                                    <button class="btn btn-primary" onclick="openPropertyViewModal({
-                                        image: 'https://images.pexels.com/photos/1396122/pexels-photo-1396122.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-                                        name: 'Beachfront Villa',
-                                        address: '456 Ocean Drive, Miami Beach, FL 33139',
-                                        type: 'Villa',
-                                        status: 'Inactive',
-                                        price: '$250',
-                                        rating: '4.7 ⭐',
-                                        bedrooms: 4,
-                                        bathrooms: 3,
-                                        guests: 8,
-                                        bookings: 5,
-                                        description: 'Luxurious beachfront villa with private beach access and stunning ocean views. Perfect for families and groups seeking a tropical paradise.',
-                                        amenities: ['WiFi', 'Pool', 'Parking', 'Kitchen']
-                                    })">
-                                        <i class="fas fa-eye"></i> View
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="property-card">
-                            <div class="card-image">
-                                <img src="https://images.pexels.com/photos/209274/pexels-photo-209274.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1" alt="Mountain Cabin">
-                                <span class="card-badge active">Active</span>
-                            </div>
-                            <div class="card-content">
-                                <h3>Mountain Cabin Retreat</h3>
-                                <div class="card-stats">
-                                    <span class="card-stat">
-                                        <i class="fas fa-calendar-check"></i> 8 Bookings
-                                    </span>
-                                    <span class="card-stat">
-                                        <i class="fas fa-star"></i> 5.0
-                                    </span>
-                                </div>
-                                <div class="card-actions">
-                                    <button class="btn btn-secondary" onclick="openPropertyEditModal({
-                                        id: 3,
-                                        name: 'Mountain Cabin Retreat',
-                                        address: '789 Mountain Road, Aspen, CO 81611',
-                                        type: 'Cabin',
-                                        status: 'Active',
-                                        price: 180,
-                                        bedrooms: 3,
-                                        bathrooms: 2,
-                                        guests: 6,
-                                        description: 'Charming mountain cabin nestled in the woods. Perfect for nature lovers and those seeking peace and tranquility.',
-                                        amenities: ['WiFi', 'Parking', 'Kitchen', 'Air Conditioning']
-                                    })">
-                                        <i class="fas fa-edit"></i> Edit
-                                    </button>
-                                    <button class="btn btn-primary" onclick="openPropertyViewModal({
-                                        image: 'https://images.pexels.com/photos/209274/pexels-photo-209274.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-                                        name: 'Mountain Cabin Retreat',
-                                        address: '789 Mountain Road, Aspen, CO 81611',
-                                        type: 'Cabin',
-                                        status: 'Active',
-                                        price: '$180',
-                                        rating: '5.0 ⭐',
-                                        bedrooms: 3,
-                                        bathrooms: 2,
-                                        guests: 6,
-                                        bookings: 8,
-                                        description: 'Charming mountain cabin nestled in the woods. Perfect for nature lovers and those seeking peace and tranquility. Features rustic decor and modern comforts.',
-                                        amenities: ['WiFi', 'Parking', 'Kitchen', 'Air Conditioning']
-                                    })">
-                                        <i class="fas fa-eye"></i> View
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
+                        <?php endforeach; ?>
+                        <?php endif; ?>
                     </div>
                 </section>
 
@@ -2106,130 +2262,53 @@ body {
                                 </tr>
                             </thead>
                             <tbody>
+                                <?php if (empty($bookings)): ?>
+                                <tr>
+                                    <td colspan="6" style="text-align: center; padding: 40px;">
+                                        <div class="empty-state">
+                                            <i class="fas fa-calendar-times"></i>
+                                            <h3>No Booking Requests Yet</h3>
+                                            <p>When tenants request to book your properties, they'll appear here.</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <?php else: ?>
+                                <?php foreach ($bookings as $booking): ?>
                                 <tr>
                                     <td>
                                         <div class="guest-info">
-                                            <img src="https://images.pexels.com/photos/1222271/pexels-photo-1222271.jpeg?auto=compress&cs=tinysrgb&w=400" alt="Liam Harper" class="guest-avatar">
-                                            <span class="guest-name">Liam Harper</span>
+                                            <img src="<?php echo htmlspecialchars($booking['tenant_image'] ?? 'https://via.placeholder.com/40x40?text=User'); ?>" 
+                                                 alt="<?php echo htmlspecialchars($booking['tenant_name']); ?>" class="guest-avatar">
+                                            <span class="guest-name"><?php echo htmlspecialchars($booking['tenant_name']); ?></span>
                                         </div>
                                     </td>
-                                    <td>Cozy Apartment in Downtown</td>
-                                    <td>Jul 15, 2025</td>
-                                    <td>Jul 20, 2025</td>
-                                    <td><span class="status-badge status-pending">Pending</span></td>
+                                    <td><?php echo htmlspecialchars($booking['property_title']); ?></td>
+                                    <td><?php echo date('M d, Y', strtotime($booking['check_in_date'])); ?></td>
+                                    <td><?php echo date('M d, Y', strtotime($booking['check_out_date'])); ?></td>
+                                    <td><span class="status-badge status-<?php echo strtolower($booking['status']); ?>"><?php echo ucfirst($booking['status']); ?></span></td>
                                     <td>
                                         <div class="action-buttons">
                                             <button class="action-btn view" onclick="openBookingModal({
-                                                guestName: 'Liam Harper',
-                                                guestEmail: 'liam.harper@example.com',
-                                                guestPhone: '+1 (555) 234-5678',
-                                                guestAvatar: 'https://images.pexels.com/photos/1222271/pexels-photo-1222271.jpeg?auto=compress&cs=tinysrgb&w=400',
-                                                property: 'Cozy Apartment in Downtown',
-                                                checkin: 'Jul 15, 2025',
-                                                checkout: 'Jul 20, 2025',
-                                                status: 'Pending',
-                                                nights: 5,
-                                                price: '$750',
-                                                guests: 2,
-                                                bookingDate: 'Jul 1, 2025',
-                                                notes: 'Would prefer a quiet unit. Early check-in requested if possible.'
+                                                guestName: '<?php echo addslashes(htmlspecialchars($booking['tenant_name'])); ?>',
+                                                guestEmail: '<?php echo addslashes(htmlspecialchars($booking['tenant_email'])); ?>',
+                                                guestPhone: '<?php echo addslashes(htmlspecialchars($booking['tenant_phone'])); ?>',
+                                                guestAvatar: '<?php echo htmlspecialchars($booking['tenant_image'] ?? 'https://via.placeholder.com/40x40?text=User'); ?>',
+                                                property: '<?php echo addslashes(htmlspecialchars($booking['property_title'])); ?>',
+                                                checkin: '<?php echo date('M d, Y', strtotime($booking['check_in_date'])); ?>',
+                                                checkout: '<?php echo date('M d, Y', strtotime($booking['check_out_date'])); ?>',
+                                                status: '<?php echo ucfirst($booking['status']); ?>',
+                                                nights: '<?php echo $booking['nights']; ?>',
+                                                price: '$<?php echo number_format($booking['total_price'], 2); ?>',
+                                                guests: '<?php echo $booking['guests']; ?>',
+                                                bookingDate: '<?php echo date('M d, Y', strtotime($booking['created_at'])); ?>',
+                                                notes: '<?php echo addslashes(htmlspecialchars($booking['message'])); ?>',
+                                                bookingId: <?php echo $booking['booking_id']; ?>
                                             })">View</button>
                                         </div>
                                     </td>
                                 </tr>
-                                <tr>
-                                    <td>
-                                        <div class="guest-info">
-                                            <img src="https://images.pexels.com/photos/1065084/pexels-photo-1065084.jpeg?auto=compress&cs=tinysrgb&w=400" alt="Ava Bennett" class="guest-avatar">
-                                            <span class="guest-name">Ava Bennett</span>
-                                        </div>
-                                    </td>
-                                    <td>Beachfront Villa</td>
-                                    <td>Aug 5, 2025</td>
-                                    <td>Aug 12, 2025</td>
-                                    <td><span class="status-badge status-accepted">Accepted</span></td>
-                                    <td>
-                                        <div class="action-buttons">
-                                            <button class="action-btn view" onclick="openBookingModal({
-                                                guestName: 'Ava Bennett',
-                                                guestEmail: 'ava.bennett@example.com',
-                                                guestPhone: '+1 (555) 345-6789',
-                                                guestAvatar: 'https://images.pexels.com/photos/1065084/pexels-photo-1065084.jpeg?auto=compress&cs=tinysrgb&w=400',
-                                                property: 'Beachfront Villa',
-                                                checkin: 'Aug 5, 2025',
-                                                checkout: 'Aug 12, 2025',
-                                                status: 'Accepted',
-                                                nights: 7,
-                                                price: '$1,750',
-                                                guests: 4,
-                                                bookingDate: 'Jul 20, 2025',
-                                                notes: 'Family vacation. Need beach equipment and high chair for toddler.'
-                                            })">View</button>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td>
-                                        <div class="guest-info">
-                                            <img src="https://images.pexels.com/photos/91227/pexels-photo-91227.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1" alt="Noah Foster" class="guest-avatar">
-                                            <span class="guest-name">Noah Foster</span>
-                                        </div>
-                                    </td>
-                                    <td>Mountain Cabin Retreat</td>
-                                    <td>Sep 1, 2025</td>
-                                    <td>Sep 7, 2025</td>
-                                    <td><span class="status-badge status-pending">Pending</span></td>
-                                    <td>
-                                        <div class="action-buttons">
-                                            <button class="action-btn view" onclick="openBookingModal({
-                                                guestName: 'Noah Foster',
-                                                guestEmail: 'noah.foster@example.com',
-                                                guestPhone: '+1 (555) 456-7890',
-                                                guestAvatar: 'https://images.pexels.com/photos/91227/pexels-photo-91227.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-                                                property: 'Mountain Cabin Retreat',
-                                                checkin: 'Sep 1, 2025',
-                                                checkout: 'Sep 7, 2025',
-                                                status: 'Pending',
-                                                nights: 6,
-                                                price: '$900',
-                                                guests: 3,
-                                                bookingDate: 'Aug 15, 2025',
-                                                notes: 'Planning a hiking trip. Interested in local trail maps and recommendations.'
-                                            })">View</button>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td>
-                                        <div class="guest-info">
-                                            <img src="https://images.pexels.com/photos/1036623/pexels-photo-1036623.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1" alt="Emma Wilson" class="guest-avatar">
-                                            <span class="guest-name">Emma Wilson</span>
-                                        </div>
-                                    </td>
-                                    <td>Cozy Apartment in Downtown</td>
-                                    <td>Jul 22, 2025</td>
-                                    <td>Jul 28, 2025</td>
-                                    <td><span class="status-badge status-accepted">Accepted</span></td>
-                                    <td>
-                                        <div class="action-buttons">
-                                            <button class="action-btn view" onclick="openBookingModal({
-                                                guestName: 'Emma Wilson',
-                                                guestEmail: 'emma.wilson@example.com',
-                                                guestPhone: '+1 (555) 567-8901',
-                                                guestAvatar: 'https://images.pexels.com/photos/1036623/pexels-photo-1036623.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-                                                property: 'Cozy Apartment in Downtown',
-                                                checkin: 'Jul 22, 2025',
-                                                checkout: 'Jul 28, 2025',
-                                                status: 'Accepted',
-                                                nights: 6,
-                                                price: '$900',
-                                                guests: 1,
-                                                bookingDate: 'Jul 10, 2025',
-                                                notes: 'Business trip. Need reliable WiFi and workspace. Late checkout appreciated.'
-                                            })">View</button>
-                                        </div>
-                                    </td>
-                                </tr>
+                                <?php endforeach; ?>
+                                <?php endif; ?>
                             </tbody>
                         </table>
                     </div>
@@ -2371,12 +2450,15 @@ body {
 
                     <div class="settings-container">
                         <div class="profile-picture-upload">
-                            <img src="https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=160&h=150&dpr=1" alt="Profile Picture" id="profileImage">
+                            <img src="<?php echo htmlspecialchars($profile_image_url); ?>" alt="Profile Picture" id="profileImage">
                             <div class="upload-btn-wrapper">
-                                <button class="btn btn-primary" onclick="document.getElementById('photoUpload').click()">
-                                    <i class="fas fa-camera"></i> Change Photo
+                                <button class="btn btn-primary" onclick="document.getElementById('profileImageInput').click()">
+                                    <i class="fas fa-camera"></i> Select Photo
                                 </button>
-                                <input type="file" id="photoUpload" accept="image/*" style="display: none;" onchange="changePhoto(event)">
+                                <button class="btn btn-success" id="uploadPhotoBtn" style="display: none;" onclick="uploadPhoto()">
+                                    <i class="fas fa-upload"></i> Upload Photo
+                                </button>
+                                <input type="file" id="profileImageInput" accept="image/*" style="display: none;" onchange="previewPhoto(event)">
                             </div>
                         </div>
 
@@ -2384,49 +2466,44 @@ body {
                             <div class="form-row">
                                 <div class="form-group">
                                     <label>First Name *</label>
-                                    <input type="text" value="Sophia" required>
+                                    <input type="text" id="firstName" value="<?php echo htmlspecialchars($first_name); ?>" required>
                                 </div>
                                 <div class="form-group">
                                     <label>Last Name *</label>
-                                    <input type="text" value="Martinez" required>
+                                    <input type="text" id="lastName" value="<?php echo htmlspecialchars($last_name); ?>" required>
                                 </div>
                             </div>
 
                             <div class="form-group">
                                 <label>Email Address *</label>
-                                <input type="email" value="sophia.martinez@example.com" required>
+                                <input type="email" id="email" value="<?php echo htmlspecialchars($user_email); ?>" required>
                             </div>
 
                             <div class="form-row">
                                 <div class="form-group">
                                     <label>Phone Number *</label>
-                                    <input type="tel" value="+1 (555) 123-4567" required>
+                                    <input type="tel" id="phone" value="<?php echo htmlspecialchars($user_phone); ?>" required>
                                 </div>
                                 <div class="form-group">
                                     <label>Date of Birth</label>
-                                    <input type="date" value="1988-03-15">
+                                    <input type="date" id="dateOfBirth" value="<?php echo htmlspecialchars($user_date_of_birth); ?>">
                                 </div>
                             </div>
 
                             <div class="form-group">
                                 <label>Address</label>
-                                <input type="text" value="456 Property Lane, New York">
+                                <input type="text" id="address" value="<?php echo htmlspecialchars($user_address); ?>">
                             </div>
 
                             <div class="form-row">
                                 <div class="form-group">
                                     <label>City</label>
-                                    <input type="text" value="New York">
+                                    <input type="text" id="city" value="<?php echo htmlspecialchars($user_city); ?>">
                                 </div>
                                 <div class="form-group">
                                     <label>Postal Code</label>
-                                    <input type="text" value="10001">
+                                    <input type="text" id="postalCode" value="<?php echo htmlspecialchars($user_postal_code); ?>">
                                 </div>
-                            </div>
-
-                            <div class="form-group">
-                                <label>Bio</label>
-                                <textarea rows="4" placeholder="Tell us about yourself...">Property owner with 8 years of experience in rental management. Specialized in luxury apartments and vacation rentals.</textarea>
                             </div>
 
                             <div class="settings-actions">
@@ -3244,8 +3321,7 @@ body {
         // Logout function
         function logout() {
             if (confirm('Are you sure you want to logout?')) {
-                localStorage.removeItem('userSession');
-                window.location.href = 'login.php';
+                window.location.href = '../api/logout.php';
             }
         }
 
@@ -3888,29 +3964,144 @@ body {
         // ===== Settings Functions =====
         
         // Save Settings Form
-        function saveSettings(event) {
+        async function saveSettings(event) {
             event.preventDefault();
-            alert('Profile updated successfully!');
+            
+            const formData = new FormData();
+            formData.append('first_name', document.getElementById('firstName').value);
+            formData.append('last_name', document.getElementById('lastName').value);
+            formData.append('email', document.getElementById('email').value);
+            formData.append('phone', document.getElementById('phone').value);
+            formData.append('date_of_birth', document.getElementById('dateOfBirth').value);
+            formData.append('address', document.getElementById('address').value);
+            formData.append('city', document.getElementById('city').value);
+            formData.append('postal_code', document.getElementById('postalCode').value);
+
+            try {
+                const response = await fetch('../api/update_profile.php', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('✓ Profile updated successfully!');
+                    // Update the displayed name in sidebar
+                    const fullName = document.getElementById('firstName').value + ' ' + document.getElementById('lastName').value;
+                    document.querySelector('.sidebar-profile h3').textContent = fullName;
+                    
+                    // Refresh the page to show updated values
+                    location.reload();
+                } else {
+                    alert('Error: ' + result.message);
+                }
+            } catch (error) {
+                console.error('Update error:', error);
+                alert('Failed to update profile. Please try again.');
+            }
         }
 
         // Change Photo Function
-        function changePhoto(event) {
+        let selectedPhotoFile = null;
+
+        function previewPhoto(event) {
             const file = event.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    document.getElementById('profileImage').src = e.target.result;
-                    
-                    // Also update sidebar profile image
-                    const sidebarImg = document.querySelector('.sidebar-profile img');
-                    if (sidebarImg) {
-                        sidebarImg.src = e.target.result;
-                    }
-                    
-                    alert('Profile photo updated successfully!');
-                };
-                reader.readAsDataURL(file);
+            if (!file) return;
+
+            selectedPhotoFile = file;
+
+            // Validate file type
+            const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+            if (!allowedTypes.includes(file.type)) {
+                alert('Invalid file type. Please select a JPG, PNG, GIF, or WebP image.');
+                event.target.value = ''; // Clear the input
+                selectedPhotoFile = null;
+                return;
             }
+
+            // Validate file size (5MB max)
+            const maxSize = 5 * 1024 * 1024; // 5MB
+            if (file.size > maxSize) {
+                alert('File too large. Maximum size is 5MB.');
+                event.target.value = ''; // Clear the input
+                selectedPhotoFile = null;
+                return;
+            }
+
+            // Show preview
+            const profileImg = document.getElementById('profileImage');
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                profileImg.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+
+            // Show upload button
+            document.getElementById('uploadPhotoBtn').style.display = 'inline-block';
+        }
+
+        async function uploadPhoto() {
+            if (!selectedPhotoFile) {
+                alert('Please select a photo first.');
+                return;
+            }
+
+            const profileImg = document.getElementById('profileImage');
+            const sidebarImg = document.querySelector('.sidebar-profile img');
+            const originalSrc = profileImg.src;
+
+            // Show loading state
+            const uploadBtn = document.getElementById('uploadPhotoBtn');
+            const originalText = uploadBtn.innerHTML;
+            uploadBtn.disabled = true;
+            uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+
+            try {
+                const formData = new FormData();
+                formData.append('profile_image', selectedPhotoFile);
+
+                const response = await fetch('../api/upload_profile_photo.php', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('✓ ' + result.message);
+                    // Update with server URL
+                    const serverUrl = '../' + result.image_url.substring(1);
+                    profileImg.src = serverUrl;
+                    if (sidebarImg) {
+                        sidebarImg.src = serverUrl;
+                    }
+                    // Hide upload button
+                    uploadBtn.style.display = 'none';
+                    selectedPhotoFile = null;
+                } else {
+                    alert('Error: ' + result.message);
+                    // Restore original image on error
+                    profileImg.src = originalSrc;
+                    if (sidebarImg) {
+                        sidebarImg.src = originalSrc;
+                    }
+                }
+            } catch (error) {
+                console.error('Upload error:', error);
+                alert('Failed to upload photo. Please try again.');
+                // Restore original image on error
+                profileImg.src = originalSrc;
+                if (sidebarImg) {
+                    sidebarImg.src = originalSrc;
+                }
+            } finally {
+                uploadBtn.disabled = false;
+                uploadBtn.innerHTML = originalText;
+            }
+
+            // Clear the input so the same file can be selected again
+            document.getElementById('profileImageInput').value = '';
         }
 
         // Password Modal Functions
@@ -3925,26 +4116,92 @@ body {
             document.getElementById('passwordForm').reset();
         }
 
-        function changePassword(event) {
+        async function changePassword(event) {
             event.preventDefault();
             
             const currentPassword = document.getElementById('currentPassword').value;
             const newPassword = document.getElementById('newPassword').value;
             const confirmPassword = document.getElementById('confirmPassword').value;
             
+            // Client-side validation
+            if (!currentPassword || !newPassword || !confirmPassword) {
+                alert('Please fill in all fields!');
+                return;
+            }
+            
             if (newPassword !== confirmPassword) {
                 alert('New passwords do not match!');
                 return;
             }
             
-            if (newPassword.length < 6) {
-                alert('Password must be at least 6 characters long!');
+            if (newPassword.length < 8) {
+                alert('Password must be at least 8 characters long!');
                 return;
             }
             
-            // In real application, this would make an API call
-            alert('Password changed successfully!');
-            closePasswordModal();
+            // Password strength validation - must contain at least one number
+            const hasNumber = /[0-9]/.test(newPassword);
+
+            if (!hasNumber) {
+                alert('Password must contain at least one number');
+                return;
+            }
+            
+            // Show loading state
+            const submitBtn = event.target.querySelector('button[type="submit"]');
+            if (!submitBtn) {
+                // Fallback if button not found
+                const modalFooterBtn = document.querySelector('#passwordModal .btn-primary');
+                if (modalFooterBtn) {
+                    submitBtn = modalFooterBtn;
+                }
+            }
+            
+            let originalText = '';
+            if (submitBtn) {
+                originalText = submitBtn.innerHTML;
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Changing Password...';
+            }
+            
+            try {
+                const response = await fetch('../api/change_password.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        current_password: currentPassword,
+                        new_password: newPassword,
+                        confirm_password: confirmPassword
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('Password changed successfully! ✓\n\nYou will be logged out for security reasons.');
+                    closePasswordModal();
+                    
+                    // Log out the user
+                    setTimeout(() => {
+                        window.location.href = '../api/logout.php';
+                    }, 1000);
+                } else {
+                    alert('Error: ' + result.message);
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = originalText;
+                    }
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('An error occurred while changing password. Please try again.');
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = originalText;
+                }
+            }
         }
 
         // Close password modal when clicking outside
@@ -3980,3 +4237,7 @@ body {
     </script>
 </body>
 </html>
+
+
+
+

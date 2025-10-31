@@ -4,7 +4,7 @@
     
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Modern Family Flat in Gulshan - HouseRental</title>
+    <title><?php echo $property ? htmlspecialchars($property['title']) : 'Property Details'; ?> - HouseRental</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.1/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
@@ -23,6 +23,14 @@
     .amenities-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 2.5rem; }
     .amenity-item { display: flex; align-items: center; gap: 8px; }
     .amenity-item i { color: var(--secondary-color); }
+    .booking-form { margin-top: 20px; }
+    .booking-form .form-group { margin-bottom: 15px; }
+    .booking-form label { display: block; margin-bottom: 5px; font-weight: 600; }
+    .booking-form input, .booking-form textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; }
+    .booking-form textarea { resize: vertical; min-height: 80px; }
+    .alert { padding: 10px; margin-bottom: 15px; border-radius: 5px; }
+    .alert-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+    .alert-error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
     
     
     .booking-box .btn-primary:hover {
@@ -238,6 +246,34 @@ a:hover { color: #16a085; }
 .pagination a.active, .pagination a:hover { background: var(--secondary-color); color: var(--background-white); border-color: var(--secondary-color); }
     </style>
 </head>
+    <?php
+            require_once __DIR__ . '/config/database.php';
+            require_once __DIR__ . '/includes/auth.php';
+
+            $property = null;
+            $error = '';
+
+            if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
+                $error = 'Invalid property ID';
+            } else {
+                $id = (int)$_GET['id'];
+                $sql = "SELECT p.*, u.name as landlord_name, u.phone as landlord_phone FROM properties p LEFT JOIN users u ON p.landlord_id = u.id WHERE p.id = ? AND p.status = 'available'";
+                if ($stmt = $conn->prepare($sql)) {
+                    $stmt->bind_param('i', $id);
+                    $stmt->execute();
+                    $result = $stmt->get_result();
+                    $property = $result->fetch_assoc();
+                    $stmt->close();
+                }
+
+                if (!$property) {
+                    $error = 'Property not found or not available';
+                }
+            }
+
+            if ($error): ?>
+                <div class="alert alert-error"><?php echo htmlspecialchars($error); ?></div>
+            <?php else: ?>
 <body>
     
     
@@ -258,8 +294,8 @@ a:hover { color: #16a085; }
          <div class="property-images" style="width:100%; max-width:100%; margin:0 auto 2.5rem auto;">
             <div class="main-image-box" style="width:100%; max-width:1100px; margin:0 auto; aspect-ratio: 16/7; border-radius:16px; overflow:hidden; box-shadow:0 6px 32px rgba(44,62,80,0.13); position:relative;">
                 <img id="mainPropertyImage"
-                     src="https://images.pexels.com/photos/1643383/pexels-photo-1643383.jpeg?auto=compress&cs=tinysrgb&w=1600"
-                     alt="Modern Family Flat in Gulshan"
+                     src="<?php echo htmlspecialchars($property['main_image'] ?: 'images/default-property.jpg'); ?>"
+                     alt="<?php echo htmlspecialchars($property['title']); ?>"
                      style="width:100%; height:100%; object-fit:cover; transition:0.2s; cursor: zoom-in;">
                 
                 <span id="imgCounter" style="position:absolute; bottom:18px; right:34px; background:rgba(0,0,0,0.55); color:#fff; font-size:1.08rem; border-radius:7px; padding:3px 13px;">1 / 5</span>
@@ -294,15 +330,78 @@ a:hover { color: #16a085; }
     </div>
     
     <aside class="booking-box" style="background:#fff; padding:32px 28px; border-radius:16px; box-shadow:0 4px 24px rgba(44,62,80,0.10); position:sticky; top:120px; max-width:340px; min-width:260px; margin-left:auto; flex:1 1 340px;">
-        <h3 style="font-size:2rem; font-weight:700; color:var(--secondary-color); margin-bottom:0.7rem;">৳ 85,000 <span style="font-size:1rem; font-weight:400; color:#888;">/ Month</span></h3>
+        <h3 style="font-size:2rem; font-weight:700; color:var(--secondary-color); margin-bottom:0.7rem;">৳ <?php echo number_format($property['price']); ?> <span style="font-size:1rem; font-weight:400; color:#888;">/ Month</span></h3>
         <p style="margin-bottom:1.2rem; color:#555;">Includes all utilities and fees.</p>
-        <a href="#" class="btn btn-primary" style="width:100%; margin-bottom:1.1rem;">Request to Book</a>
-        <div style="margin-bottom:1.2rem; color:#888; font-size:0.97rem;">
+
+        <?php if (isLoggedIn() && $_SESSION['user_role'] === 'tenant'): ?>
+            <div class="booking-form">
+                <h4>Request to Book</h4>
+                <?php
+                // Check if user already has a pending request for this property
+                $user_id = $_SESSION['user_id'];
+                $check_sql = "SELECT id FROM bookings WHERE property_id = ? AND tenant_id = ? AND status = 'pending'";
+                $has_pending = false;
+                if ($check_stmt = $conn->prepare($check_sql)) {
+                    $check_stmt->bind_param('ii', $property['id'], $user_id);
+                    $check_stmt->execute();
+                    $check_stmt->store_result();
+                    $has_pending = $check_stmt->num_rows > 0;
+                    $check_stmt->close();
+                }
+
+                if (isset($_POST['submit_booking'])) {
+                    if ($has_pending) {
+                        echo '<div class="alert alert-error">You already have a pending booking request for this property.</div>';
+                    } else {
+                        $move_in_date = $_POST['move_in_date'];
+                        $duration = (int)$_POST['duration'];
+                        $message = trim($_POST['message']);
+
+                        $insert_sql = "INSERT INTO bookings (property_id, tenant_id, landlord_id, move_in_date, duration_months, message, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', NOW())";
+                        if ($insert_stmt = $conn->prepare($insert_sql)) {
+                            $insert_stmt->bind_param('iiisis', $property['id'], $user_id, $property['landlord_id'], $move_in_date, $duration, $message);
+                            if ($insert_stmt->execute()) {
+                                echo '<div class="alert alert-success">Booking request submitted successfully! The landlord will contact you soon.</div>';
+                                $has_pending = true;
+                            } else {
+                                echo '<div class="alert alert-error">Error submitting booking request. Please try again.</div>';
+                            }
+                            $insert_stmt->close();
+                        }
+                    }
+                }
+
+                if (!$has_pending): ?>
+                    <form method="POST">
+                        <div class="form-group">
+                            <label for="move_in_date">Preferred Move-in Date:</label>
+                            <input type="date" id="move_in_date" name="move_in_date" required min="<?php echo date('Y-m-d'); ?>">
+                        </div>
+                        <div class="form-group">
+                            <label for="duration">Duration (months):</label>
+                            <input type="number" id="duration" name="duration" required min="1" max="24" value="12">
+                        </div>
+                        <div class="form-group">
+                            <label for="message">Message to Landlord:</label>
+                            <textarea id="message" name="message" placeholder="Tell the landlord why you're interested in this property..."></textarea>
+                        </div>
+                        <button type="submit" name="submit_booking" class="btn btn-primary" style="width:100%;">Submit Booking Request</button>
+                    </form>
+                <?php else: ?>
+                    <div class="alert alert-success">You have a pending booking request for this property.</div>
+                <?php endif; ?>
+            </div>
+        <?php elseif (isLoggedIn() && $_SESSION['user_role'] === 'landlord'): ?>
+            <div class="alert alert-error">Landlords cannot book properties. This is your property.</div>
+        <?php else: ?>
+            <a href="login.php" class="btn btn-primary" style="width:100%; margin-bottom:1.1rem;">Login to Book</a>
+            <p style="text-align: center; color: #666; font-size: 0.9rem;">Only registered tenants can request bookings.</p>
+        <?php endif; ?>
+
+        <div style="margin-top:1.2rem; color:#888; font-size:0.97rem;">
             <i class="fas fa-phone-alt" style="color:var(--secondary-color);"></i>
-            For direct booking or queries:<br>
-            <!-- <a href="tel:+8801712345678" style="color:var(--secondary-color); font-weight:600;">+880 1712-345678</a> -->
-        
-        <a href="tel:+880170000000" class="btn btn-secondary" style="width:100%;">Call Landlord</a>
+            For direct queries:<br>
+            <a href="tel:<?php echo htmlspecialchars($property['landlord_phone'] ?: '+880170000000'); ?>" class="btn btn-secondary" style="width:100%; margin-top: 10px;">Call Landlord</a>
         </div>
     </aside>
 </div>
@@ -312,9 +411,8 @@ a:hover { color: #16a085; }
 
            
                <div class="detail-content" style="flex:2 1 500px;">
-                
-                    <h1>Modern Family Flat in Gulshan</h1>
-                    <p class="location"><i class="fas fa-map-marker-alt"></i> Gulshan, Dhaka</p>
+                    <h1><?php echo htmlspecialchars($property['title']); ?></h1>
+                    <p class="location"><i class="fas fa-map-marker-alt"></i> <?php echo htmlspecialchars($property['address'] . ($property['city'] ? ', ' . $property['city'] : '')); ?></p>
                     <!-- <div class="detail-specs" style="margin-bottom: 1.2rem;">
                         <span><i class="fas fa-bed"></i> 3 Beds</span>
                         <span><i class="fas fa-bath"></i> 3 Baths</span>
@@ -326,39 +424,35 @@ a:hover { color: #16a085; }
                         <h2>Basic Information</h2>
                          <div style="display:grid; grid-template-columns: repeat(5, 1fr); gap:1.1rem 1.5rem; font-size:1.05rem;">
         <!-- 10 items, 5 per row -->
-        <div style="display:flex;align-items:center;gap:7px;"><i class="fas fa-building" style="color:#16a085;"></i>Flat</div>
-        <div style="display:flex;align-items:center;gap:7px;"><i class="fas fa-users" style="color:#16a085;"></i>Family</div>
-        <div style="display:flex;align-items:center;gap:7px;"><i class="fas fa-vector-square" style="color:#16a085;"></i>1800 sqft</div>
-        <div style="display:flex;align-items:center;gap:7px;"><i class="fas fa-layer-group" style="color:#16a085;"></i>5th Floor</div>
-        <div style="display:flex;align-items:center;gap:7px;"><i class="fas fa-bed" style="color:#16a085;"></i>3 Beds</div>
-        <div style="display:flex;align-items:center;gap:7px;"><i class="fas fa-bath" style="color:#16a085;"></i>3 Baths</div>
-        <div style="display:flex;align-items:center;gap:7px;"><i class="fas fa-door-open" style="color:#16a085;"></i>2 Balcony</div>
-        <div style="display:flex;align-items:center;gap:7px;"><i class="fas fa-compass" style="color:#16a085;"></i>South Facing</div>
-        <div style="display:flex;align-items:center;gap:7px;"><i class="fas fa-calendar-check" style="color:#16a085;"></i>Available: 1 Oct 2025</div>
-        <div style="display:flex;align-items:center;gap:7px;"><i class="fas fa-calendar-alt" style="color:#16a085;"></i>Posted: 5 Sep 2025</div>
+        <div style="display:flex;align-items:center;gap:7px;"><i class="fas fa-building" style="color:#16a085;"></i><?php echo htmlspecialchars(ucfirst($property['property_type'])); ?></div>
+        <div style="display:flex;align-items:center;gap:7px;"><i class="fas fa-users" style="color:#16a085;"></i><?php echo htmlspecialchars($property['suitable_for'] ?: 'Family'); ?></div>
+        <div style="display:flex;align-items:center;gap:7px;"><i class="fas fa-vector-square" style="color:#16a085;"></i><?php echo (int)$property['area_sqft']; ?> sqft</div>
+        <div style="display:flex;align-items:center;gap:7px;"><i class="fas fa-layer-group" style="color:#16a085;"></i><?php echo (int)$property['floor']; ?>th Floor</div>
+        <div style="display:flex;align-items:center;gap:7px;"><i class="fas fa-bed" style="color:#16a085;"></i><?php echo (int)$property['bedrooms']; ?> Beds</div>
+        <div style="display:flex;align-items:center;gap:7px;"><i class="fas fa-bath" style="color:#16a085;"></i><?php echo (int)$property['bathrooms']; ?> Baths</div>
+        <div style="display:flex;align-items:center;gap:7px;"><i class="fas fa-door-open" style="color:#16a085;"></i><?php echo (int)$property['balconies']; ?> Balcony</div>
+        <div style="display:flex;align-items:center;gap:7px;"><i class="fas fa-compass" style="color:#16a085;"></i><?php echo htmlspecialchars($property['facing'] ?: 'South'); ?> Facing</div>
+        <div style="display:flex;align-items:center;gap:7px;"><i class="fas fa-calendar-check" style="color:#16a085;"></i>Available: <?php echo htmlspecialchars($property['available_from'] ?: 'Immediate'); ?></div>
+        <div style="display:flex;align-items:center;gap:7px;"><i class="fas fa-calendar-alt" style="color:#16a085;"></i>Posted: <?php echo date('d M Y', strtotime($property['created_at'])); ?></div>
     </div>
 </div>
                     <!-- </div> -->
                     
                     
                     <h2>About this place</h2>
-                    <p>
-                        Welcome to this modern, spacious family flat located in the heart of Gulshan, Dhaka. Enjoy a peaceful and secure environment with all the conveniences of city life. The flat features a large living area, stylish interiors, a modern kitchen, and a private balcony with a beautiful city view. Perfect for families or professionals seeking comfort and elegance in a prime location.
-                    </p>
+                    <p><?php echo nl2br(htmlspecialchars($property['description'] ?: 'No description available.')); ?></p>
                     
                     
 <h2>What this place offers</h2>
 <div class="amenities-grid" style="display:grid; grid-template-columns: repeat(5, 1fr); gap:1rem 1.5rem; margin-bottom:2rem;">
-    <div class="amenity-item"><i class="fas fa-wifi" style="color:#16a085;"></i> High-speed Wifi</div>
-    <div class="amenity-item"><i class="fas fa-tv" style="color:#16a085;"></i> Smart TV</div>
-    <div class="amenity-item"><i class="fas fa-utensils" style="color:#16a085;"></i> Modern Kitchen</div>
-    <div class="amenity-item"><i class="fas fa-fan" style="color:#16a085;"></i> Air Conditioning</div>
-    <div class="amenity-item"><i class="fas fa-car" style="color:#16a085;"></i> Reserved Parking</div>
-    <div class="amenity-item"><i class="fas fa-shield-alt" style="color:#16a085;"></i> 24/7 Security</div>
-    <div class="amenity-item"><i class="fas fa-elevator" style="color:#16a085;"></i> Elevator</div>
-    <div class="amenity-item"><i class="fas fa-bolt" style="color:#16a085;"></i> Generator Backup</div>
-    <div class="amenity-item"><i class="fas fa-water" style="color:#16a085;"></i> Hot & Cold Water</div>
-    <div class="amenity-item"><i class="fas fa-tree" style="color:#16a085;"></i> Rooftop Garden</div>
+    <?php
+    $amenities = json_decode($property['amenities'], true) ?: [];
+    $default_amenities = ['WiFi', 'Parking', 'Security', 'Generator', 'Elevator'];
+    $all_amenities = array_unique(array_merge($amenities, $default_amenities));
+
+    foreach ($all_amenities as $amenity): ?>
+        <div class="amenity-item"><i class="fas fa-check"></i> <?php echo htmlspecialchars($amenity); ?></div>
+    <?php endforeach; ?>
 </div>
 
 
@@ -366,7 +460,7 @@ a:hover { color: #16a085; }
                     <h2 style="margin-top:2.2rem;">Location</h2>
                     <div style="margin-bottom: 1.5rem;">
                         <iframe
-                            src="https://www.google.com/maps?q=Gulshan,+Dhaka,+Bangladesh&output=embed"
+                            src="https://www.google.com/maps?q=<?php echo urlencode($property['address'] . ', ' . $property['city']); ?>&output=embed"
                             width="100%"
                             height="260"
                             style="border:1px solid #ecf0f1; border-radius:12px;"
@@ -376,7 +470,7 @@ a:hover { color: #16a085; }
                         </iframe>
                         <div style="margin-top:0.7rem; color:var(--text-medium); font-size:1rem;">
                             <i class="fas fa-map-marker-alt" style="color:var(--secondary-color);"></i>
-                            Gulshan, Dhaka
+                            <?php echo htmlspecialchars($property['address'] . ($property['city'] ? ', ' . $property['city'] : '')); ?>
                         </div>
                     </div>
                     <!-- End Location Section -->
@@ -530,10 +624,9 @@ a:hover { color: #16a085; }
                 </div>
             </div>
         </section>
-
     </main>
     </div>
-
+            <?php endif; ?>
 
     <!-- Footer Placeholder -->
     <div id="footer-placeholder"></div>
@@ -798,3 +891,7 @@ document.addEventListener('DOMContentLoaded', function() {
     <script src="script.js"></script> -->
 </body>
 </html>
+
+
+
+

@@ -1,3 +1,23 @@
+<?php
+session_start();
+
+// Check if user is logged in
+if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
+    header('Location: /house_rental/login.php');
+    exit();
+}
+
+// Check if user is admin
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
+    header('Location: /house_rental/index.php');
+    exit();
+}
+
+// Get user info
+$admin_name = $_SESSION['full_name'] ?? 'Admin';
+$admin_email = $_SESSION['email'] ?? '';
+$admin_username = $_SESSION['username'] ?? '';
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1245,7 +1265,7 @@
                 <li><a href="#" class="nav-link" data-section="settings">
                     <i class="fas fa-cog"></i> Settings
                 </a></li>
-                <li><a href="../index.php">
+                <li><a href="../api/logout.php">
                     <i class="fas fa-sign-out-alt"></i> Logout
                 </a></li>
             </ul>
@@ -1258,7 +1278,7 @@
                 <div class="content-header">
                     <div class="header-title">
                         <h1>Dashboard Overview</h1>
-                        <p>Welcome back, Admin! Here's what's happening today.</p>
+                        <p>Welcome back, <?php echo htmlspecialchars($admin_name); ?>! Here's what's happening today.</p>
                     </div>
                     <div class="header-actions">
                         <div class="user-profile">
@@ -1266,7 +1286,7 @@
                                 <i class="fas fa-user-shield"></i>
                             </div>
                             <div class="user-info">
-                                <span class="user-name">Admin User</span>
+                                <span class="user-name"><?php echo htmlspecialchars($admin_name); ?></span>
                                 <span class="user-role">Administrator</span>
                             </div>
                         </div>
@@ -1418,15 +1438,23 @@
 
                 <div class="table-container">
                     <div class="table-header">
-                        <h3>All Users (156)</h3>
+                        <h3>All Users (<span id="userCount">0</span>)</h3>
                         <div class="table-actions">
-                            <input type="text" class="form-control" placeholder="Search users..." style="width: 250px; padding: 8px 12px;">
-                            <select class="form-control" style="width: auto; padding: 8px 12px;">
-                                <option>All Roles</option>
-                                <option>Landlords</option>
-                                <option>Tenants</option>
-                                <option>Admins</option>
+                            <input type="text" id="userSearch" class="form-control" placeholder="Search users..." style="width: 250px; padding: 8px 12px;">
+                            <select id="roleFilter" class="form-control" style="width: auto; padding: 8px 12px;">
+                                <option value="all">All Roles</option>
+                                <option value="tenant">Tenants</option>
+                                <option value="landlord">Landlords</option>
+                                <option value="admin">Admins</option>
                             </select>
+                            <select id="statusFilter" class="form-control" style="width: auto; padding: 8px 12px;">
+                                <option value="all">All Status</option>
+                                <option value="active">Active</option>
+                                <option value="inactive">Inactive</option>
+                            </select>
+                            <button class="btn btn-info btn-sm" onclick="loadUsers()">
+                                <i class="fas fa-sync"></i> Refresh
+                            </button>
                         </div>
                     </div>
                     <table class="data-table">
@@ -1437,141 +1465,25 @@
                                 <th>Role</th>
                                 <th>Status</th>
                                 <th>Joined Date</th>
+                                <th>Last Login</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody id="usersTableBody">
                             <tr>
-                                <td>
-                                    <div class="user-cell">
-                                        <img src="https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=100" alt="User" class="user-avatar">
-                                        <span class="user-name-cell">Sophia Martinez</span>
-                                    </div>
-                                </td>
-                                <td>sophia.martinez@example.com</td>
-                                <td><span class="badge landlord">Landlord</span></td>
-                                <td><span class="badge active">Active</span></td>
-                                <td>Jan 15, 2025</td>
-                                <td>
-                                    <div class="action-btns">
-                                        <div class="tooltip-wrapper">
-                                            <button class="btn btn-info btn-sm" onclick="viewUser(1)">
-                                                <i class="fas fa-eye"></i>
-                                            </button>
-                                            <span class="tooltip-text">View Details</span>
-                                        </div>
-                                        <div class="tooltip-wrapper">
-                                            <button class="btn btn-warning btn-sm" onclick="editUser(1)">
-                                                <i class="fas fa-edit"></i>
-                                            </button>
-                                            <span class="tooltip-text">Edit User</span>
-                                        </div>
-                                        <div class="tooltip-wrapper">
-                                            <button class="btn btn-danger btn-sm" onclick="deleteUser(1)">
-                                                <i class="fas fa-trash"></i>
-                                            </button>
-                                            <span class="tooltip-text">Delete User</span>
-                                        </div>
-                                    </div>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>
-                                    <div class="user-cell">
-                                        <img src="https://images.pexels.com/photos/1222271/pexels-photo-1222271.jpeg?auto=compress&cs=tinysrgb&w=100" alt="User" class="user-avatar">
-                                        <span class="user-name-cell">Liam Harper</span>
-                                    </div>
-                                </td>
-                                <td>liam.harper@example.com</td>
-                                <td><span class="badge tenant">Tenant</span></td>
-                                <td><span class="badge active">Active</span></td>
-                                <td>Feb 20, 2025</td>
-                                <td>
-                                    <div class="action-btns">
-                                        <div class="tooltip-wrapper">
-                                            <button class="btn btn-info btn-sm" onclick="viewUser(2)">
-                                                <i class="fas fa-eye"></i>
-                                            </button>
-                                            <span class="tooltip-text">View Details</span>
-                                        </div>
-                                        <div class="tooltip-wrapper">
-                                            <button class="btn btn-warning btn-sm" onclick="editUser(2)">
-                                                <i class="fas fa-edit"></i>
-                                            </button>
-                                            <span class="tooltip-text">Edit User</span>
-                                        </div>
-                                        <div class="tooltip-wrapper">
-                                            <button class="btn btn-danger btn-sm" onclick="deleteUser(2)">
-                                                <i class="fas fa-trash"></i>
-                                            </button>
-                                            <span class="tooltip-text">Delete User</span>
-                                        </div>
-                                    </div>
-                                </td>
-                                    </div>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>
-                                    <div class="user-cell">
-                                        <img src="https://images.pexels.com/photos/1065084/pexels-photo-1065084.jpeg?auto=compress&cs=tinysrgb&w=100" alt="User" class="user-avatar">
-                                        <span class="user-name-cell">Ava Bennett</span>
-                                    </div>
-                                </td>
-                                <td>ava.bennett@example.com</td>
-                                <td><span class="badge tenant">Tenant</span></td>
-                                <td><span class="badge active">Active</span></td>
-                                <td>Mar 10, 2025</td>
-                                <td>
-                                    <div class="action-btns">
-                                        <button class="btn btn-info btn-sm" onclick="viewUser(3)">
-                                            <i class="fas fa-eye"></i>
-                                        </button>
-                                        <button class="btn btn-warning btn-sm" onclick="editUser(3)">
-                                            <i class="fas fa-edit"></i>
-                                        </button>
-                                        <button class="btn btn-danger btn-sm" onclick="deleteUser(3)">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>
-                                    <div class="user-cell">
-                                        <img src="https://images.pexels.com/photos/91227/pexels-photo-91227.jpeg?auto=compress&cs=tinysrgb&w=100" alt="User" class="user-avatar">
-                                        <span class="user-name-cell">Noah Foster</span>
-                                    </div>
-                                </td>
-                                <td>noah.foster@example.com</td>
-                                <td><span class="badge landlord">Landlord</span></td>
-                                <td><span class="badge inactive">Inactive</span></td>
-                                <td>Apr 5, 2025</td>
-                                <td>
-                                    <div class="action-btns">
-                                        <div class="tooltip-wrapper">
-                                            <button class="btn btn-info btn-sm" onclick="viewUser(4)">
-                                                <i class="fas fa-eye"></i>
-                                            </button>
-                                            <span class="tooltip-text">View Details</span>
-                                        </div>
-                                        <div class="tooltip-wrapper">
-                                            <button class="btn btn-warning btn-sm" onclick="editUser(4)">
-                                                <i class="fas fa-edit"></i>
-                                            </button>
-                                            <span class="tooltip-text">Edit User</span>
-                                        </div>
-                                        <div class="tooltip-wrapper">
-                                            <button class="btn btn-danger btn-sm" onclick="deleteUser(4)">
-                                                <i class="fas fa-trash"></i>
-                                            </button>
-                                            <span class="tooltip-text">Delete User</span>
-                                        </div>
-                                    </div>
+                                <td colspan="7" style="text-align: center; padding: 40px;">
+                                    <i class="fas fa-spinner fa-spin" style="font-size: 24px; color: var(--secondary-color);"></i>
+                                    <p style="margin-top: 10px; color: var(--text-medium);">Loading users...</p>
                                 </td>
                             </tr>
                         </tbody>
                     </table>
+
+                    <!-- Pagination -->
+                    <div id="paginationContainer" style="display: none; padding: 20px; text-align: center;">
+                        <div id="paginationInfo" style="margin-bottom: 10px; color: var(--text-medium);"></div>
+                        <div id="paginationButtons"></div>
+                    </div>
                 </div>
             </section>
 
@@ -1924,7 +1836,7 @@
 
                 <!-- Settings Grid -->
                 <div class="stats-grid" style="margin-bottom: 30px;">
-                    <div class="stat-card primary" style="cursor: pointer;" onclick="showSettingsTab('general')">
+                    <div class="stat-card primary clickable active" onclick="showSettingsTab('general', this)">
                         <div class="stat-icon primary">
                             <i class="fas fa-globe"></i>
                         </div>
@@ -1934,7 +1846,7 @@
                         </div>
                     </div>
 
-                    <div class="stat-card info" style="cursor: pointer;" onclick="showSettingsTab('security')">
+                    <div class="stat-card info clickable" onclick="showSettingsTab('security', this)">
                         <div class="stat-icon info">
                             <i class="fas fa-shield-alt"></i>
                         </div>
@@ -1944,7 +1856,7 @@
                         </div>
                     </div>
 
-                    <div class="stat-card warning" style="cursor: pointer;" onclick="showSettingsTab('notifications')">
+                    <div class="stat-card warning clickable" onclick="showSettingsTab('notifications', this)">
                         <div class="stat-icon warning">
                             <i class="fas fa-bell"></i>
                         </div>
@@ -1962,36 +1874,24 @@
                             <h3><i class="fas fa-globe"></i> General Settings</h3>
                         </div>
                         <div style="padding: 30px;">
-                            <div class="form-group">
-                                <label><i class="fas fa-tag"></i> Website Name</label>
-                                <input type="text" class="form-control" value="AmarThikana" placeholder="Enter website name">
-                            </div>
-                            <div class="form-group">
-                                <label><i class="fas fa-align-left"></i> Tagline</label>
-                                <input type="text" class="form-control" value="Your Home, Your Choice" placeholder="Enter tagline">
-                            </div>
-                            <div class="form-group">
-                                <label><i class="fas fa-file-alt"></i> Site Description</label>
-                                <textarea class="form-control" rows="3" placeholder="Describe your website">Your trusted platform for finding and renting properties in Bangladesh</textarea>
-                            </div>
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
                                 <div class="form-group">
                                     <label><i class="fas fa-envelope"></i> Admin Email</label>
-                                    <input type="email" class="form-control" value="admin@amarthikana.com" placeholder="admin@example.com">
+                                    <input type="email" class="form-control" id="adminEmail" value="admin@amarthikana.com" placeholder="admin@example.com">
                                 </div>
                                 <div class="form-group">
                                     <label><i class="fas fa-phone"></i> Contact Phone</label>
-                                    <input type="tel" class="form-control" value="+880 1234-567890" placeholder="+880 XXXX-XXXXXX">
+                                    <input type="tel" class="form-control" id="contactPhone" value="+880 1234-567890" placeholder="+880 XXXX-XXXXXX">
                                 </div>
                             </div>
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
                                 <div class="form-group">
                                     <label><i class="fas fa-map-marker-alt"></i> Business Address</label>
-                                    <input type="text" class="form-control" value="Dhaka, Bangladesh" placeholder="Enter address">
+                                    <input type="text" class="form-control" id="businessAddress" value="Dhaka, Bangladesh" placeholder="Enter address">
                                 </div>
                                 <div class="form-group">
                                     <label><i class="fas fa-globe-asia"></i> Timezone</label>
-                                    <select class="form-control">
+                                    <select class="form-control" id="timezone">
                                         <option>Asia/Dhaka (GMT+6)</option>
                                         <option>Asia/Kolkata (GMT+5:30)</option>
                                         <option>UTC (GMT+0)</option>
@@ -2001,7 +1901,7 @@
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
                                 <div class="form-group">
                                     <label><i class="fas fa-language"></i> Default Language</label>
-                                    <select class="form-control">
+                                    <select class="form-control" id="defaultLanguage">
                                         <option>English</option>
                                         <option>বাংলা (Bangla)</option>
                                         <option>Hindi</option>
@@ -2009,7 +1909,7 @@
                                 </div>
                                 <div class="form-group">
                                     <label><i class="fas fa-money-bill-wave"></i> Currency</label>
-                                    <select class="form-control">
+                                    <select class="form-control" id="currency">
                                         <option>BDT (৳)</option>
                                         <option>USD ($)</option>
                                         <option>EUR (€)</option>
@@ -2017,7 +1917,7 @@
                                     </select>
                                 </div>
                             </div>
-                            <button class="btn btn-primary" style="margin-top: 10px;">
+                            <button class="btn btn-primary" id="saveGeneralSettings" onclick="saveGeneralSettings()" style="margin-top: 10px;">
                                 <i class="fas fa-save"></i> Save General Settings
                             </button>
                         </div>
@@ -2042,7 +1942,7 @@
                             </div>
                             <div class="form-group">
                                 <label><i class="fas fa-user-check"></i> Account Verification Method</label>
-                                <select class="form-control">
+                                <select class="form-control" id="verificationMethod">
                                     <option>Email Verification Required</option>
                                     <option>Phone Verification Required</option>
                                     <option>Both Email & Phone Required</option>
@@ -2051,17 +1951,17 @@
                             </div>
                             <div class="form-group">
                                 <label><i class="fas fa-key"></i> Minimum Password Length</label>
-                                <input type="number" class="form-control" value="8" min="6" max="20">
+                                <input type="number" class="form-control" id="minPasswordLength" value="8" min="6" max="20">
                             </div>
                             <div class="form-group">
                                 <label style="display: flex; align-items: center; cursor: pointer;">
-                                    <input type="checkbox" style="width: auto; margin-right: 10px;" checked>
+                                    <input type="checkbox" id="requireSpecialChars" style="width: auto; margin-right: 10px;" checked>
                                     <span><i class="fas fa-spell-check"></i> Require special characters in password</span>
                                 </label>
                             </div>
                             <div class="form-group">
                                 <label style="display: flex; align-items: center; cursor: pointer;">
-                                    <input type="checkbox" style="width: auto; margin-right: 10px;" checked>
+                                    <input type="checkbox" id="requireNumbers" style="width: auto; margin-right: 10px;" checked>
                                     <span><i class="fas fa-sort-numeric-up"></i> Require numbers in password</span>
                                 </label>
                             </div>
@@ -2071,17 +1971,17 @@
                             </h4>
                             <div class="form-group">
                                 <label style="display: flex; align-items: center; cursor: pointer;">
-                                    <input type="checkbox" style="width: auto; margin-right: 10px;" checked>
+                                    <input type="checkbox" id="enableIpTracking" style="width: auto; margin-right: 10px;" checked>
                                     <span><i class="fas fa-fingerprint"></i> Enable IP Tracking & Logging</span>
                                 </label>
                             </div>
                             <div class="form-group">
                                 <label style="display: flex; align-items: center; cursor: pointer;">
-                                    <input type="checkbox" style="width: auto; margin-right: 10px;" checked>
+                                    <input type="checkbox" id="sendSecurityAlerts" style="width: auto; margin-right: 10px;" checked>
                                     <span><i class="fas fa-exclamation-triangle"></i> Send Security Alerts via Email</span>
                                 </label>
                             </div>
-                            <button class="btn btn-primary">
+                            <button class="btn btn-primary" id="saveSecuritySettings" onclick="saveSecuritySettings()">
                                 <i class="fas fa-save"></i> Save Security Settings
                             </button>
                         </div>
@@ -2100,31 +2000,31 @@
                             </h4>
                             <div class="form-group">
                                 <label style="display: flex; align-items: center; cursor: pointer;">
-                                    <input type="checkbox" style="width: auto; margin-right: 10px;" checked>
+                                    <input type="checkbox" id="emailNewUser" style="width: auto; margin-right: 10px;" checked>
                                     <span>New user registration</span>
                                 </label>
                             </div>
                             <div class="form-group">
                                 <label style="display: flex; align-items: center; cursor: pointer;">
-                                    <input type="checkbox" style="width: auto; margin-right: 10px;" checked>
+                                    <input type="checkbox" id="emailNewProperty" style="width: auto; margin-right: 10px;" checked>
                                     <span>New property listing</span>
                                 </label>
                             </div>
                             <div class="form-group">
                                 <label style="display: flex; align-items: center; cursor: pointer;">
-                                    <input type="checkbox" style="width: auto; margin-right: 10px;" checked>
+                                    <input type="checkbox" id="emailBookingConfirm" style="width: auto; margin-right: 10px;" checked>
                                     <span>Booking confirmations</span>
                                 </label>
                             </div>
                             <div class="form-group">
                                 <label style="display: flex; align-items: center; cursor: pointer;">
-                                    <input type="checkbox" style="width: auto; margin-right: 10px;" checked>
+                                    <input type="checkbox" id="emailPaymentTrans" style="width: auto; margin-right: 10px;" checked>
                                     <span>Payment transactions</span>
                                 </label>
                             </div>
                             <div class="form-group">
                                 <label style="display: flex; align-items: center; cursor: pointer;">
-                                    <input type="checkbox" style="width: auto; margin-right: 10px;">
+                                    <input type="checkbox" id="emailSystemUpdates" style="width: auto; margin-right: 10px;">
                                     <span>System updates</span>
                                 </label>
                             </div>
@@ -2134,19 +2034,19 @@
                             </h4>
                             <div class="form-group">
                                 <label style="display: flex; align-items: center; cursor: pointer;">
-                                    <input type="checkbox" style="width: auto; margin-right: 10px;" checked>
+                                    <input type="checkbox" id="smsCriticalAlerts" style="width: auto; margin-right: 10px;" checked>
                                     <span>Critical alerts only</span>
                                 </label>
                             </div>
                             <div class="form-group">
                                 <label style="display: flex; align-items: center; cursor: pointer;">
-                                    <input type="checkbox" style="width: auto; margin-right: 10px;">
+                                    <input type="checkbox" id="smsBookingNotif" style="width: auto; margin-right: 10px;">
                                     <span>Booking notifications</span>
                                 </label>
                             </div>
                             <div class="form-group">
                                 <label style="display: flex; align-items: center; cursor: pointer;">
-                                    <input type="checkbox" style="width: auto; margin-right: 10px;">
+                                    <input type="checkbox" id="smsPaymentConfirm" style="width: auto; margin-right: 10px;">
                                     <span>Payment confirmations</span>
                                 </label>
                             </div>
@@ -2156,33 +2056,33 @@
                             </h4>
                             <div class="form-group">
                                 <label><i class="fas fa-server"></i> SMTP Server</label>
-                                <input type="text" class="form-control" value="smtp.gmail.com" placeholder="smtp.example.com">
+                                <input type="text" class="form-control" id="smtpServer" value="smtp.gmail.com" placeholder="smtp.example.com">
                             </div>
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
                                 <div class="form-group">
                                     <label><i class="fas fa-user"></i> SMTP Username</label>
-                                    <input type="text" class="form-control" value="noreply@amarthikana.com">
+                                    <input type="text" class="form-control" id="smtpUsername" value="noreply@amarthikana.com">
                                 </div>
                                 <div class="form-group">
                                     <label><i class="fas fa-lock"></i> SMTP Password</label>
-                                    <input type="password" class="form-control" value="••••••••">
+                                    <input type="password" class="form-control" id="smtpPassword" value="••••••••">
                                 </div>
                             </div>
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
                                 <div class="form-group">
                                     <label><i class="fas fa-plug"></i> SMTP Port</label>
-                                    <input type="number" class="form-control" value="587">
+                                    <input type="number" class="form-control" id="smtpPort" value="587">
                                 </div>
                                 <div class="form-group">
                                     <label><i class="fas fa-shield-alt"></i> Encryption</label>
-                                    <select class="form-control">
+                                    <select class="form-control" id="smtpEncryption">
                                         <option>TLS</option>
                                         <option>SSL</option>
                                         <option>None</option>
                                     </select>
                                 </div>
                             </div>
-                            <button class="btn btn-primary">
+                            <button class="btn btn-primary" id="saveNotificationSettings" onclick="saveNotificationSettings()">
                                 <i class="fas fa-save"></i> Save Notification Settings
                             </button>
                         </div>
@@ -2201,7 +2101,7 @@
     <div id="addUserModal" class="modal-overlay">
         <div class="modal">
             <div class="modal-header">
-                <h3>Add New User</h3>
+                <h3><i class="fas fa-user-plus"></i> Add New User</h3>
                 <button class="modal-close" onclick="closeAddUserModal()">
                     <i class="fas fa-times"></i>
                 </button>
@@ -2209,36 +2109,111 @@
             <div class="modal-body">
                 <form id="addUserForm">
                     <div class="form-group">
-                        <label>Full Name *</label>
-                        <input type="text" class="form-control" required>
+                        <label><i class="fas fa-user"></i> Full Name *</label>
+                        <input type="text" class="form-control" id="addFullName" required placeholder="Enter full name">
                     </div>
                     <div class="form-group">
-                        <label>Email Address *</label>
-                        <input type="email" class="form-control" required>
+                        <label><i class="fas fa-at"></i> Username *</label>
+                        <input type="text" class="form-control" id="addUsername" required placeholder="Enter username">
                     </div>
                     <div class="form-group">
-                        <label>Phone Number *</label>
-                        <input type="tel" class="form-control" required>
+                        <label><i class="fas fa-envelope"></i> Email Address *</label>
+                        <input type="email" class="form-control" id="addEmail" required placeholder="Enter email address">
                     </div>
                     <div class="form-group">
-                        <label>User Role *</label>
-                        <select class="form-control" required>
+                        <label><i class="fas fa-phone"></i> Phone Number</label>
+                        <input type="tel" class="form-control" id="addPhone" placeholder="Enter phone number">
+                    </div>
+                    <div class="form-group">
+                        <label><i class="fas fa-user-tag"></i> User Role *</label>
+                        <select class="form-control" id="addRole" required>
                             <option value="">Select Role</option>
-                            <option value="landlord">Landlord</option>
                             <option value="tenant">Tenant</option>
+                            <option value="landlord">Landlord</option>
                             <option value="admin">Admin</option>
                         </select>
                     </div>
                     <div class="form-group">
-                        <label>Password *</label>
-                        <input type="password" class="form-control" required>
+                        <label><i class="fas fa-lock"></i> Password *</label>
+                        <input type="password" class="form-control" id="addPassword" required placeholder="Enter password" minlength="6">
+                        <small style="color: var(--text-medium); font-size: 0.85rem;">
+                            Password must be at least 6 characters long
+                        </small>
                     </div>
                 </form>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-danger" onclick="closeAddUserModal()">Cancel</button>
-                <button class="btn btn-primary" onclick="submitAddUser()">
+                <button class="btn btn-primary" id="addUserBtn" onclick="submitAddUser()">
                     <i class="fas fa-save"></i> Add User
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit User Modal -->
+    <div id="editUserModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3><i class="fas fa-user-edit"></i> Edit User</h3>
+                <button class="modal-close" onclick="closeEditUserModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="editUserForm">
+                    <input type="hidden" id="editUserId">
+                    <div class="form-group">
+                        <label><i class="fas fa-user"></i> Full Name *</label>
+                        <input type="text" class="form-control" id="editFullName" required placeholder="Enter full name">
+                    </div>
+                    <div class="form-group">
+                        <label><i class="fas fa-at"></i> Username *</label>
+                        <input type="text" class="form-control" id="editUsername" required placeholder="Enter username">
+                    </div>
+                    <div class="form-group">
+                        <label><i class="fas fa-envelope"></i> Email Address *</label>
+                        <input type="email" class="form-control" id="editEmail" required placeholder="Enter email address">
+                    </div>
+                    <div class="form-group">
+                        <label><i class="fas fa-phone"></i> Phone Number</label>
+                        <input type="tel" class="form-control" id="editPhone" placeholder="Enter phone number">
+                    </div>
+                    <div class="form-group">
+                        <label><i class="fas fa-user-tag"></i> User Role *</label>
+                        <select class="form-control" id="editRole" required>
+                            <option value="">Select Role</option>
+                            <option value="tenant">Tenant</option>
+                            <option value="landlord">Landlord</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label><i class="fas fa-toggle-on"></i> Account Status *</label>
+                        <select class="form-control" id="editStatus" required>
+                            <option value="active">Active</option>
+                            <option value="inactive">Inactive</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; cursor: pointer;">
+                            <input type="checkbox" id="changePassword" style="width: auto; margin-right: 10px;">
+                            <span><i class="fas fa-key"></i> Change Password</span>
+                        </label>
+                    </div>
+                    <div class="form-group" id="newPasswordGroup" style="display: none;">
+                        <label><i class="fas fa-lock"></i> New Password *</label>
+                        <input type="password" class="form-control" id="editNewPassword" placeholder="Enter new password" minlength="6">
+                        <small style="color: var(--text-medium); font-size: 0.85rem;">
+                            Password must be at least 6 characters long
+                        </small>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-danger" onclick="closeEditUserModal()">Cancel</button>
+                <button class="btn btn-primary" id="editUserBtn" onclick="submitEditUser()">
+                    <i class="fas fa-save"></i> Update User
                 </button>
             </div>
         </div>
@@ -2274,16 +2249,14 @@
                         <strong><i class="fas fa-info-circle"></i> Password Requirements:</strong>
                         <ul style="margin: 10px 0 0 20px; font-size: 0.9rem;">
                             <li>Minimum 8 characters</li>
-                            <li>At least one uppercase letter</li>
                             <li>At least one number</li>
-                            <li>At least one special character</li>
                         </ul>
                     </div>
                 </form>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-danger" onclick="closeChangePasswordModal()">Cancel</button>
-                <button class="btn btn-primary" onclick="submitChangePassword()">
+                <button class="btn btn-primary" id="changePasswordBtn" onclick="submitChangePassword()">
                     <i class="fas fa-save"></i> Change Password
                 </button>
             </div>
@@ -2334,13 +2307,191 @@
                     // Add active class to clicked link and target section
                     this.classList.add('active');
                     document.getElementById(targetSection).classList.add('active');
+
+                    // Load users when users section is activated
+                    if (targetSection === 'users') {
+                        loadUsers();
+                    }
                 });
             });
+
+            // Load settings
+            loadSettings();
+        });
+
+        // Global variables for user management
+        let currentPage = 1;
+        let currentSearch = '';
+        let currentRoleFilter = 'all';
+        let currentStatusFilter = 'all';
+
+        // Load users function
+        async function loadUsers(page = 1) {
+            currentPage = page;
+            const usersTableBody = document.getElementById('usersTableBody');
+            const userCount = document.getElementById('userCount');
+            const paginationContainer = document.getElementById('paginationContainer');
+            const paginationInfo = document.getElementById('paginationInfo');
+            const paginationButtons = document.getElementById('paginationButtons');
+
+            // Show loading state
+            usersTableBody.innerHTML = `
+                <tr>
+                    <td colspan="7" style="text-align: center; padding: 40px;">
+                        <i class="fas fa-spinner fa-spin" style="font-size: 24px; color: var(--secondary-color);"></i>
+                        <p style="margin-top: 10px; color: var(--text-medium);">Loading users...</p>
+                    </td>
+                </tr>
+            `;
+
+            try {
+                const params = new URLSearchParams({
+                    page: page,
+                    limit: 10,
+                    search: currentSearch,
+                    role: currentRoleFilter,
+                    status: currentStatusFilter
+                });
+
+                const response = await fetch(`../api/list_users.php?${params}`);
+                const result = await response.json();
+
+                if (result.success) {
+                    // Update user count
+                    userCount.textContent = result.pagination.total_count;
+
+                    // Render users table
+                    if (result.users.length === 0) {
+                        usersTableBody.innerHTML = `
+                            <tr>
+                                <td colspan="7" style="text-align: center; padding: 40px;">
+                                    <i class="fas fa-users" style="font-size: 48px; color: var(--text-medium); opacity: 0.5;"></i>
+                                    <p style="margin-top: 15px; color: var(--text-medium); font-size: 1.1rem;">No users found</p>
+                                    <p style="color: var(--text-medium);">Try adjusting your search or filters</p>
+                                </td>
+                            </tr>
+                        `;
+                    } else {
+                        usersTableBody.innerHTML = result.users.map(user => `
+                            <tr>
+                                <td>
+                                    <div class="user-cell">
+                                        <img src="${user.profile_image}" alt="User" class="user-avatar" onerror="this.src='https://via.placeholder.com/40x40/cccccc/666666?text=${user.full_name.charAt(0)}'">
+                                        <div>
+                                            <div class="user-name-cell">${user.full_name}</div>
+                                            <div style="font-size: 0.8rem; color: var(--text-medium);">@${user.username}</div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>${user.email}</td>
+                                <td><span class="badge ${user.role}">${user.role.charAt(0).toUpperCase() + user.role.slice(1)}</span></td>
+                                <td><span class="badge ${user.status}">${user.status.charAt(0).toUpperCase() + user.status.slice(1)}</span></td>
+                                <td>${user.created_at}</td>
+                                <td>${user.last_login}</td>
+                                <td>
+                                    <div class="action-btns">
+                                        <div class="tooltip-wrapper">
+                                            <button class="btn btn-info btn-sm" onclick="viewUser(${user.id})">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
+                                            <span class="tooltip-text">View Details</span>
+                                        </div>
+                                        <div class="tooltip-wrapper">
+                                            <button class="btn btn-warning btn-sm" onclick="editUser(${user.id})">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <span class="tooltip-text">Edit User</span>
+                                        </div>
+                                        <div class="tooltip-wrapper">
+                                            <button class="btn btn-danger btn-sm" onclick="deleteUser(${user.id})">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                            <span class="tooltip-text">Delete User</span>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        `).join('');
+                    }
+
+                    // Update pagination
+                    if (result.pagination.total_pages > 1) {
+                        paginationContainer.style.display = 'block';
+                        paginationInfo.textContent = `Page ${result.pagination.current_page} of ${result.pagination.total_pages} (${result.pagination.total_count} total users)`;
+
+                        let buttonsHtml = '';
+
+                        // Previous button
+                        if (result.pagination.current_page > 1) {
+                            buttonsHtml += `<button class="btn btn-sm" onclick="loadUsers(${result.pagination.current_page - 1})"><i class="fas fa-chevron-left"></i> Previous</button>`;
+                        }
+
+                        // Page numbers
+                        const startPage = Math.max(1, result.pagination.current_page - 2);
+                        const endPage = Math.min(result.pagination.total_pages, result.pagination.current_page + 2);
+
+                        for (let i = startPage; i <= endPage; i++) {
+                            if (i === result.pagination.current_page) {
+                                buttonsHtml += `<button class="btn btn-primary btn-sm" disabled>${i}</button>`;
+                            } else {
+                                buttonsHtml += `<button class="btn btn-sm" onclick="loadUsers(${i})">${i}</button>`;
+                            }
+                        }
+
+                        // Next button
+                        if (result.pagination.current_page < result.pagination.total_pages) {
+                            buttonsHtml += `<button class="btn btn-sm" onclick="loadUsers(${result.pagination.current_page + 1})">Next <i class="fas fa-chevron-right"></i></button>`;
+                        }
+
+                        paginationButtons.innerHTML = buttonsHtml;
+                    } else {
+                        paginationContainer.style.display = 'none';
+                    }
+                } else {
+                    usersTableBody.innerHTML = `
+                        <tr>
+                            <td colspan="7" style="text-align: center; padding: 40px;">
+                                <i class="fas fa-exclamation-triangle" style="font-size: 48px; color: var(--danger-color);"></i>
+                                <p style="margin-top: 15px; color: var(--danger-color); font-size: 1.1rem;">Error loading users</p>
+                                <p style="color: var(--text-medium);">${result.message}</p>
+                            </td>
+                        </tr>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error loading users:', error);
+                usersTableBody.innerHTML = `
+                    <tr>
+                        <td colspan="7" style="text-align: center; padding: 40px;">
+                            <i class="fas fa-exclamation-triangle" style="font-size: 48px; color: var(--danger-color);"></i>
+                            <p style="margin-top: 15px; color: var(--danger-color); font-size: 1.1rem;">Connection Error</p>
+                            <p style="color: var(--text-medium);">Unable to load users. Please try again.</p>
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+
+        // Search and filter functionality
+        document.getElementById('userSearch')?.addEventListener('input', function() {
+            currentSearch = this.value.trim();
+            loadUsers(1);
+        });
+
+        document.getElementById('roleFilter')?.addEventListener('change', function() {
+            currentRoleFilter = this.value;
+            loadUsers(1);
+        });
+
+        document.getElementById('statusFilter')?.addEventListener('change', function() {
+            currentStatusFilter = this.value;
+            loadUsers(1);
         });
 
         // Modal Functions
         function openAddUserModal() {
             document.getElementById('addUserModal').classList.add('active');
+            document.getElementById('addUserForm').reset();
         }
 
         function closeAddUserModal() {
@@ -2348,35 +2499,205 @@
             document.getElementById('addUserForm').reset();
         }
 
-        function submitAddUser() {
+        function openEditUserModal() {
+            document.getElementById('editUserModal').classList.add('active');
+        }
+
+        function closeEditUserModal() {
+            document.getElementById('editUserModal').classList.remove('active');
+            document.getElementById('editUserForm').reset();
+            document.getElementById('newPasswordGroup').style.display = 'none';
+            document.getElementById('changePassword').checked = false;
+        }
+
+        async function submitAddUser() {
             const form = document.getElementById('addUserForm');
-            if (form.checkValidity()) {
-                alert('User added successfully!');
-                closeAddUserModal();
-            } else {
+            const btn = document.getElementById('addUserBtn');
+
+            // Basic validation
+            if (!form.checkValidity()) {
                 form.reportValidity();
+                return;
+            }
+
+            // Collect form data
+            const formData = new FormData();
+            formData.append('full_name', document.getElementById('addFullName').value.trim());
+            formData.append('username', document.getElementById('addUsername').value.trim());
+            formData.append('email', document.getElementById('addEmail').value.trim());
+            formData.append('phone', document.getElementById('addPhone').value.trim());
+            formData.append('role', document.getElementById('addRole').value);
+            formData.append('password', document.getElementById('addPassword').value);
+
+            // Disable button
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Adding...';
+
+            try {
+                const response = await fetch('../api/add_user.php', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('User added successfully! ✓');
+                    closeAddUserModal();
+                    loadUsers(); // Refresh the users list
+                } else {
+                    alert('Error: ' + result.message);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('An error occurred while adding the user. Please try again.');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-save"></i> Add User';
+            }
+        }
+
+        async function submitEditUser() {
+            const form = document.getElementById('editUserForm');
+            const btn = document.getElementById('editUserBtn');
+
+            // Basic validation
+            if (!form.checkValidity()) {
+                form.reportValidity();
+                return;
+            }
+
+            // Collect form data
+            const formData = new FormData();
+            formData.append('user_id', document.getElementById('editUserId').value);
+            formData.append('full_name', document.getElementById('editFullName').value.trim());
+            formData.append('username', document.getElementById('editUsername').value.trim());
+            formData.append('email', document.getElementById('editEmail').value.trim());
+            formData.append('phone', document.getElementById('editPhone').value.trim());
+            formData.append('role', document.getElementById('editRole').value);
+            formData.append('status', document.getElementById('editStatus').value);
+
+            const changePassword = document.getElementById('changePassword').checked;
+            if (changePassword) {
+                const newPassword = document.getElementById('editNewPassword').value;
+                if (!newPassword || newPassword.length < 6) {
+                    alert('New password must be at least 6 characters long');
+                    return;
+                }
+                formData.append('change_password', '1');
+                formData.append('new_password', newPassword);
+            }
+
+            // Disable button
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
+
+            try {
+                const response = await fetch('../api/edit_user.php', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('User updated successfully! ✓');
+                    closeEditUserModal();
+                    loadUsers(); // Refresh the users list
+                } else {
+                    alert('Error: ' + result.message);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('An error occurred while updating the user. Please try again.');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-save"></i> Update User';
             }
         }
 
         // User Management Functions
-        function viewUser(id) {
-            alert('Viewing user details for User ID: ' + id);
+        function viewUser(userId) {
+            alert('Viewing user details for User ID: ' + userId + '\n\nThis feature will show detailed user information in a future update.');
         }
 
-        function editUser(id) {
-            alert('Editing user with ID: ' + id);
-        }
+        async function editUser(userId) {
+            try {
+                // Fetch user data
+                const response = await fetch(`../api/list_users.php?page=1&limit=1&search=${userId}`);
+                const result = await response.json();
 
-        function deleteUser(id) {
-            if (confirm('Are you sure you want to delete this user?')) {
-                alert('User deleted successfully!');
+                if (result.success && result.users.length > 0) {
+                    const user = result.users[0];
+
+                    // Populate edit form
+                    document.getElementById('editUserId').value = user.id;
+                    document.getElementById('editFullName').value = user.full_name;
+                    document.getElementById('editUsername').value = user.username;
+                    document.getElementById('editEmail').value = user.email;
+                    document.getElementById('editPhone').value = user.phone || '';
+                    document.getElementById('editRole').value = user.role;
+                    document.getElementById('editStatus').value = user.status;
+
+                    openEditUserModal();
+                } else {
+                    alert('Error: Could not load user data');
+                }
+            } catch (error) {
+                console.error('Error loading user for edit:', error);
+                alert('An error occurred while loading user data. Please try again.');
             }
         }
+
+        async function deleteUser(userId) {
+            if (!confirm('Are you sure you want to deactivate this user? This action cannot be undone.')) {
+                return;
+            }
+
+            try {
+                const formData = new FormData();
+                formData.append('user_id', userId);
+
+                const response = await fetch('../api/delete_user.php', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert(result.message);
+                    loadUsers(); // Refresh the users list
+                } else {
+                    alert('Error: ' + result.message);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('An error occurred while deleting the user. Please try again.');
+            }
+        }
+
+        // Password change toggle
+        document.getElementById('changePassword')?.addEventListener('change', function() {
+            const passwordGroup = document.getElementById('newPasswordGroup');
+            const passwordInput = document.getElementById('editNewPassword');
+
+            if (this.checked) {
+                passwordGroup.style.display = 'block';
+                passwordInput.required = true;
+            } else {
+                passwordGroup.style.display = 'none';
+                passwordInput.required = false;
+                passwordInput.value = '';
+            }
+        });
 
         // Close modal on escape key
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') {
                 closeAddUserModal();
+                closeEditUserModal();
+                closeChangePasswordModal();
             }
         });
 
@@ -2387,16 +2708,238 @@
             }
         });
 
+        document.getElementById('editUserModal')?.addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeEditUserModal();
+            }
+        });
+
         // Settings Tab Switching
-        function showSettingsTab(tabName) {
-            // Hide all tabs
+        function showSettingsTab(tabName, clickedCard) {
+            // Remove active class from all cards and tabs
+            const cards = document.querySelectorAll('.stat-card.clickable');
             const tabs = document.querySelectorAll('.settings-tab');
+
+            cards.forEach(card => card.classList.remove('active'));
             tabs.forEach(tab => tab.classList.remove('active'));
+
+            // Add active class to clicked card
+            if (clickedCard) {
+                clickedCard.classList.add('active');
+            }
 
             // Show selected tab
             const selectedTab = document.getElementById(tabName + 'Settings');
             if (selectedTab) {
                 selectedTab.classList.add('active');
+            }
+        }
+
+        async function loadSettings() {
+            try {
+                const response = await fetch('../api/load_settings.php');
+                const result = await response.json();
+
+                if (result.success) {
+                    const settings = result.settings;
+
+                    // General settings
+                    if (settings.admin_email) document.getElementById('adminEmail').value = settings.admin_email;
+                    if (settings.contact_phone) document.getElementById('contactPhone').value = settings.contact_phone;
+                    if (settings.business_address) document.getElementById('businessAddress').value = settings.business_address;
+                    if (settings.timezone) document.getElementById('timezone').value = settings.timezone;
+                    if (settings.default_language) document.getElementById('defaultLanguage').value = settings.default_language;
+                    if (settings.currency) document.getElementById('currency').value = settings.currency;
+
+                    // Security settings
+                    if (settings.verification_method) document.getElementById('verificationMethod').value = settings.verification_method;
+                    if (settings.min_password_length) document.getElementById('minPasswordLength').value = settings.min_password_length;
+                    if (settings.require_special_chars) document.getElementById('requireSpecialChars').checked = settings.require_special_chars == '1';
+                    if (settings.require_numbers) document.getElementById('requireNumbers').checked = settings.require_numbers == '1';
+                    if (settings.enable_ip_tracking) document.getElementById('enableIpTracking').checked = settings.enable_ip_tracking == '1';
+                    if (settings.send_security_alerts) document.getElementById('sendSecurityAlerts').checked = settings.send_security_alerts == '1';
+
+                    // Notification settings
+                    if (settings.email_new_user) document.getElementById('emailNewUser').checked = settings.email_new_user == '1';
+                    if (settings.email_new_property) document.getElementById('emailNewProperty').checked = settings.email_new_property == '1';
+                    if (settings.email_booking_confirm) document.getElementById('emailBookingConfirm').checked = settings.email_booking_confirm == '1';
+                    if (settings.email_payment_trans) document.getElementById('emailPaymentTrans').checked = settings.email_payment_trans == '1';
+                    if (settings.email_system_updates) document.getElementById('emailSystemUpdates').checked = settings.email_system_updates == '1';
+                    if (settings.sms_critical_alerts) document.getElementById('smsCriticalAlerts').checked = settings.sms_critical_alerts == '1';
+                    if (settings.sms_booking_notif) document.getElementById('smsBookingNotif').checked = settings.sms_booking_notif == '1';
+                    if (settings.sms_payment_confirm) document.getElementById('smsPaymentConfirm').checked = settings.sms_payment_confirm == '1';
+                    if (settings.smtp_server) document.getElementById('smtpServer').value = settings.smtp_server;
+                    if (settings.smtp_username) document.getElementById('smtpUsername').value = settings.smtp_username;
+                    if (settings.smtp_password) document.getElementById('smtpPassword').value = settings.smtp_password;
+                    if (settings.smtp_port) document.getElementById('smtpPort').value = settings.smtp_port;
+                    if (settings.smtp_encryption) document.getElementById('smtpEncryption').value = settings.smtp_encryption;
+                }
+            } catch (error) {
+                console.error('Error loading settings:', error);
+            }
+        }
+
+        // Settings Save Functions
+        async function saveGeneralSettings() {
+            const button = document.getElementById('saveGeneralSettings');
+            const originalText = button.innerHTML;
+            
+            // Collect form data
+            const settings = {
+                adminEmail: document.getElementById('adminEmail').value,
+                contactPhone: document.getElementById('contactPhone').value,
+                businessAddress: document.getElementById('businessAddress').value,
+                timezone: document.getElementById('timezone').value,
+                defaultLanguage: document.getElementById('defaultLanguage').value,
+                currency: document.getElementById('currency').value
+            };
+
+            // Basic validation
+            if (!settings.adminEmail || !settings.contactPhone) {
+                alert('Please fill in all required fields!');
+                return;
+            }
+
+            // Disable button
+            button.disabled = true;
+            button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+
+            try {
+                const response = await fetch('../api/save_settings.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        type: 'general',
+                        settings: settings
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('General settings saved successfully! ✓');
+                } else {
+                    alert('Error saving settings: ' + result.message);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('An error occurred while saving settings. Please try again.');
+            } finally {
+                button.disabled = false;
+                button.innerHTML = originalText;
+            }
+        }
+
+        async function saveSecuritySettings() {
+            const button = document.getElementById('saveSecuritySettings');
+            const originalText = button.innerHTML;
+            
+            // Collect form data
+            const settings = {
+                verificationMethod: document.getElementById('verificationMethod').value,
+                minPasswordLength: document.getElementById('minPasswordLength').value,
+                requireSpecialChars: document.getElementById('requireSpecialChars').checked,
+                requireNumbers: document.getElementById('requireNumbers').checked,
+                enableIpTracking: document.getElementById('enableIpTracking').checked,
+                sendSecurityAlerts: document.getElementById('sendSecurityAlerts').checked
+            };
+
+            // Disable button
+            button.disabled = true;
+            button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+
+            try {
+                const response = await fetch('../api/save_settings.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        type: 'security',
+                        settings: settings
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('Security settings saved successfully! ✓');
+                } else {
+                    alert('Error saving settings: ' + result.message);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('An error occurred while saving settings. Please try again.');
+            } finally {
+                button.disabled = false;
+                button.innerHTML = originalText;
+            }
+        }
+
+        async function saveNotificationSettings() {
+            const button = document.getElementById('saveNotificationSettings');
+            const originalText = button.innerHTML;
+            
+            // Collect form data
+            const settings = {
+                emailNotifications: {
+                    newUser: document.getElementById('emailNewUser').checked,
+                    newProperty: document.getElementById('emailNewProperty').checked,
+                    bookingConfirm: document.getElementById('emailBookingConfirm').checked,
+                    paymentTrans: document.getElementById('emailPaymentTrans').checked,
+                    systemUpdates: document.getElementById('emailSystemUpdates').checked
+                },
+                smsNotifications: {
+                    criticalAlerts: document.getElementById('smsCriticalAlerts').checked,
+                    bookingNotif: document.getElementById('smsBookingNotif').checked,
+                    paymentConfirm: document.getElementById('smsPaymentConfirm').checked
+                },
+                smtpSettings: {
+                    server: document.getElementById('smtpServer').value,
+                    username: document.getElementById('smtpUsername').value,
+                    password: document.getElementById('smtpPassword').value,
+                    port: document.getElementById('smtpPort').value,
+                    encryption: document.getElementById('smtpEncryption').value
+                }
+            };
+
+            // Basic validation
+            if (!settings.smtpSettings.server || !settings.smtpSettings.username) {
+                alert('Please fill in SMTP server and username!');
+                return;
+            }
+
+            // Disable button
+            button.disabled = true;
+            button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+
+            try {
+                const response = await fetch('../api/save_settings.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        type: 'notifications',
+                        settings: settings
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('Notification settings saved successfully! ✓');
+                } else {
+                    alert('Error saving settings: ' + result.message);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('An error occurred while saving settings. Please try again.');
+            } finally {
+                button.disabled = false;
+                button.innerHTML = originalText;
             }
         }
 
@@ -2410,7 +2953,7 @@
             document.getElementById('changePasswordForm').reset();
         }
 
-        function submitChangePassword() {
+        async function submitChangePassword() {
             const currentPassword = document.getElementById('currentPassword').value;
             const newPassword = document.getElementById('newPassword').value;
             const confirmPassword = document.getElementById('confirmPassword').value;
@@ -2431,19 +2974,54 @@
                 return;
             }
 
-            // Password strength validation
-            const hasUpperCase = /[A-Z]/.test(newPassword);
+            // Password strength validation - must contain at least one number
             const hasNumber = /[0-9]/.test(newPassword);
-            const hasSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(newPassword);
 
-            if (!hasUpperCase || !hasNumber || !hasSpecial) {
-                alert('Password must contain:\n- At least one uppercase letter\n- At least one number\n- At least one special character');
+            if (!hasNumber) {
+                alert('Password must contain at least one number');
                 return;
             }
 
-            // In real application, this would make an API call
-            alert('Password changed successfully! ✓\n\nYou will be logged out for security reasons.');
-            closeChangePasswordModal();
+            // Disable button to prevent double submission
+            const submitBtn = document.getElementById('changePasswordBtn');
+            const originalText = submitBtn.innerHTML;
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Changing Password...';
+
+            try {
+                const response = await fetch('../api/change_password.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        current_password: currentPassword,
+                        new_password: newPassword,
+                        confirm_password: confirmPassword
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('Password changed successfully! ✓\n\nYou will be logged out for security reasons.');
+                    closeChangePasswordModal();
+                    
+                    // Log out the user
+                    setTimeout(() => {
+                        window.location.href = '../api/logout.php';
+                    }, 1000);
+                } else {
+                    alert('Error: ' + result.message);
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = originalText;
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('An error occurred while changing password. Please try again.');
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalText;
+            }
         }
 
         // Close Change Password modal when clicking outside
@@ -2463,3 +3041,7 @@
     </script>
 </body>
 </html>
+
+
+
+

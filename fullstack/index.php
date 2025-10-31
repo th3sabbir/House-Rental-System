@@ -74,7 +74,7 @@
             onfocus="this.style.borderColor='#2980b9'"
             onblur="this.style.borderColor='#16a085'"
         >
-            <option value="" disabled selected>Select City</option>
+            <option value="" disabled selected>Select Location</option>
             <option value="dhaka">Dhaka</option>
             <option value="chattogram">Chattogram</option>
             <option value="khulna">Khulna</option>
@@ -153,179 +153,117 @@
             <div class="container">
                 <h2 class="section-title">Featured Rentals</h2>
                 <p class="section-subtitle">Handpicked properties from the best neighborhoods to live in.</p>
-                <!-- ...existing code... -->
-        <section class="similar-properties container" style="margin-bottom: 60px;">
-            <!-- <h2 class="section-title" style="font-size:2rem; margin-bottom: 1.5rem; text-align:left;">Similar Properties</h2> -->
-            <div class="property-grid">
-                <div class="property-card">
-                    <div class="card-image">
-                        <img src="https://images.pexels.com/photos/271624/pexels-photo-271624.jpeg?auto=compress&cs=tinysrgb&w=600" alt="Modern Apartment in Dhanmondi">
-                    </div>
-                    <div class="card-content">
-                        <h3>Modern Apartment in Dhanmondi</h3>
-                        <p class="address"><i class="fas fa-map-marker-alt"></i> Dhanmondi, Dhaka</p>
-                        <div class="property-specs">
-                            <span><i class="fas fa-bed"></i> 2 Beds</span>
-                            <span><i class="fas fa-bath"></i> 2 Baths</span>
-                            <span><i class="fas fa-ruler-combined"></i> 1200 sqft</span>
-                        </div>
-                        <div style="font-weight:600; color:var(--secondary-color); margin-bottom:8px;">৳ 25,000 / Month</div>
-                        <a href="property-details.php" class="btn btn-secondary" style="padding:8px 20px; font-size:0.95rem;">View Details</a>
-                    </div>
+                <div class="property-grid">
+                    <?php
+                    // Include database connection
+                    require_once __DIR__ . '/config/database.php';
+
+                    // Pagination settings
+                    $properties_per_page = 12;
+                    $current_page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
+                    $offset = ($current_page - 1) * $properties_per_page;
+
+                    // Get total count for pagination
+                    $count_stmt = $conn->prepare("SELECT COUNT(*) as total FROM properties WHERE status = 'available'");
+                    $total_properties = 0;
+                    if ($count_stmt) {
+                        $count_stmt->execute();
+                        $count_result = $count_stmt->get_result();
+                        $total_properties = $count_result->fetch_assoc()['total'];
+                        $count_stmt->close();
+                    }
+                    $total_pages = ceil($total_properties / $properties_per_page);
+
+                    // Fetch properties for current page
+                    $stmt = $conn->prepare("SELECT property_id, title, CONCAT(COALESCE(address,''), CASE WHEN city IS NOT NULL AND city!='' THEN CONCAT(', ', city) ELSE '' END) AS location, price_per_month, bedrooms AS beds, bathrooms AS baths, area_sqft AS sqft, main_image FROM properties WHERE status = 'available' ORDER BY created_at DESC LIMIT ? OFFSET ?");
+                    if ($stmt) {
+                        $stmt->bind_param('ii', $properties_per_page, $offset);
+                        $stmt->execute();
+                        $result = $stmt->get_result();
+                        
+                        if ($result->num_rows > 0) {
+                            while ($row = $result->fetch_assoc()) {
+                                $img = $row['main_image'] ?: 'images/default-property.jpg';
+                                $title = htmlspecialchars($row['title']);
+                                $location = htmlspecialchars($row['location']);
+                                $price = number_format($row['price_per_month']);
+                                $beds = (int)$row['beds'];
+                                $baths = (int)$row['baths'];
+                                $sqft = (int)$row['sqft'];
+                                $id = (int)$row['property_id'];
+
+                                echo '<div class="property-card">';
+                                echo '  <div class="card-image">';
+                                echo '    <img src="' . htmlspecialchars($img) . '" alt="' . $title . '" loading="lazy">';
+                                echo '  </div>';
+                                echo '  <div class="card-content">';
+                                echo '    <h3>' . $title . '</h3>';
+                                echo '    <p class="address"><i class="fas fa-map-marker-alt"></i> ' . $location . '</p>';
+                                echo '    <div class="property-specs">';
+                                echo '      <span><i class="fas fa-bed"></i> ' . $beds . ' Beds</span>';
+                                echo '      <span><i class="fas fa-bath"></i> ' . $baths . ' Baths</span>';
+                                echo '      <span><i class="fas fa-ruler-combined"></i> ' . $sqft . ' sqft</span>';
+                                echo '    </div>';
+                                echo '    <div style="font-weight:600; color:var(--secondary-color); margin-bottom:8px;">৳ ' . $price . ' / Month</div>';
+                                echo '    <a href="property-details.php?id=' . $id . '" class="btn btn-secondary" style="padding:8px 20px; font-size:0.95rem;">View Details</a>';
+                                echo '  </div>';
+                                echo '</div>';
+                            }
+                        } else {
+                            echo '<div class="no-properties">';
+                            echo '<i class="fas fa-home"></i>';
+                            echo '<h3>No Properties Available</h3>';
+                            echo '<p>Check back later for new listings!</p>';
+                            echo '</div>';
+                        }
+                        $stmt->close();
+                    } else {
+                        echo '<p>Unable to load properties. Please check database connection.</p>';
+                    }
+                    ?>
                 </div>
-                <div class="property-card">
-                    <div class="card-image">
-                        <img src="https://images.pexels.com/photos/276724/pexels-photo-276724.jpeg?auto=compress&cs=tinysrgb&w=600" alt="Cozy Studio in Mohammadpur">
-                    </div>
-                    <div class="card-content">
-                        <h3>Cozy Studio in Mohammadpur</h3>
-                        <p class="address"><i class="fas fa-map-marker-alt"></i> Mohammadpur, Dhaka</p>
-                        <div class="property-specs">
-                            <span><i class="fas fa-bed"></i> 1 Bed</span>
-                            <span><i class="fas fa-bath"></i> 1 Bath</span>
-                            <span><i class="fas fa-ruler-combined"></i> 650 sqft</span>
-                        </div>
-                        <div style="font-weight:600; color:var(--secondary-color); margin-bottom:8px;">৳ 12,000 / Month</div>
-                        <a href="property-details.php" class="btn btn-secondary" style="padding:8px 20px; font-size:0.95rem;">View Details</a>
-                    </div>
+
+                <?php if ($total_pages > 1): ?>
+                <div class="pagination">
+                    <?php
+                    // Previous button
+                    if ($current_page > 1) {
+                        echo '<a href="?page=' . ($current_page - 1) . '" class="page-link"><i class="fas fa-chevron-left"></i> Previous</a>';
+                    }
+
+                    // First page
+                    if ($current_page > 3) {
+                        echo '<a href="?page=1" class="page-link">1</a>';
+                        if ($current_page > 4) {
+                            echo '<span class="page-dots">...</span>';
+                        }
+                    }
+
+                    // Page numbers around current page
+                    for ($i = max(1, $current_page - 2); $i <= min($total_pages, $current_page + 2); $i++) {
+                        if ($i == $current_page) {
+                            echo '<span class="page-link current">' . $i . '</span>';
+                        } else {
+                            echo '<a href="?page=' . $i . '" class="page-link">' . $i . '</a>';
+                        }
+                    }
+
+                    // Last page
+                    if ($current_page < $total_pages - 2) {
+                        if ($current_page < $total_pages - 3) {
+                            echo '<span class="page-dots">...</span>';
+                        }
+                        echo '<a href="?page=' . $total_pages . '" class="page-link">' . $total_pages . '</a>';
+                    }
+
+                    // Next button
+                    if ($current_page < $total_pages) {
+                        echo '<a href="?page=' . ($current_page + 1) . '" class="page-link">Next <i class="fas fa-chevron-right"></i></a>';
+                    }
+                    ?>
                 </div>
-                <div class="property-card">
-                    <div class="card-image">
-                        <img src="https://images.pexels.com/photos/5998120/pexels-photo-5998120.jpeg?auto=compress&cs=tinysrgb&w=600" alt="Family Flat in Mirpur">
-                    </div>
-                    <div class="card-content">
-                        <h3>Family Flat in Mirpur</h3>
-                        <p class="address"><i class="fas fa-map-marker-alt"></i> Mirpur, Dhaka</p>
-                        <div class="property-specs">
-                            <span><i class="fas fa-bed"></i> 3 Beds</span>
-                            <span><i class="fas fa-bath"></i> 2 Baths</span>
-                            <span><i class="fas fa-ruler-combined"></i> 1450 sqft</span>
-                        </div>
-                        <div style="font-weight:600; color:var(--secondary-color); margin-bottom:8px;">৳ 18,500 / Month</div>
-                        <a href="property-details.php" class="btn btn-secondary" style="padding:8px 20px; font-size:0.95rem;">View Details</a>
-                    </div>
-                </div>
-                <div class="property-card">
-                    <div class="card-image">
-                        <img src="https://images.pexels.com/photos/323780/pexels-photo-323780.jpeg?auto=compress&cs=tinysrgb&w=600" alt="Luxury Condo in Bashundhara">
-                    </div>
-                    <div class="card-content">
-                        <h3>Luxury House in Bashundhara</h3>
-                        <p class="address"><i class="fas fa-map-marker-alt"></i> Bashundhara, Dhaka</p>
-                        <div class="property-specs">
-                            <span><i class="fas fa-bed"></i> 3 Beds</span>
-                            <span><i class="fas fa-bath"></i> 3 Baths</span>
-                            <span><i class="fas fa-ruler-combined"></i> 1800 sqft</span>
-                        </div>
-                        <div style="font-weight:600; color:var(--secondary-color); margin-bottom:8px;">৳ 40,000 / Month</div>
-                        <a href="property-details.php" class="btn btn-secondary" style="padding:8px 20px; font-size:0.95rem;">View Details</a>
-                    </div>
-                </div>
-                <div class="property-card">
-                    <div class="card-image">
-                        <img src="https://images.pexels.com/photos/210617/pexels-photo-210617.jpeg?auto=compress&cs=tinysrgb&w=600" alt="Single Room in Uttara">
-                    </div>
-                    <div class="card-content">
-                        <h3>Single Room in Uttara</h3>
-                        <p class="address"><i class="fas fa-map-marker-alt"></i> Uttara, Dhaka</p>
-                        <div class="property-specs">
-                            <span><i class="fas fa-bed"></i> 1 Bed</span>
-                            <span><i class="fas fa-bath"></i> 1 Bath</span>
-                            <span><i class="fas fa-ruler-combined"></i> 400 sqft</span>
-                        </div>
-                        <div style="font-weight:600; color:var(--secondary-color); margin-bottom:8px;">৳ 8,000 / Month</div>
-                        <a href="property-details.php" class="btn btn-secondary" style="padding:8px 20px; font-size:0.95rem;">View Details</a>
-                    </div>
-                </div>
-                <div class="property-card">
-                    <div class="card-image">
-                        <img src="https://images.pexels.com/photos/1643383/pexels-photo-1643383.jpeg?auto=compress&cs=tinysrgb&w=600" alt="Spacious Duplex in Gulshan">
-                    </div>
-                    <div class="card-content">
-                        <h3>Spacious Duplex in Gulshan</h3>
-                        <p class="address"><i class="fas fa-map-marker-alt"></i> Gulshan, Dhaka</p>
-                        <div class="property-specs">
-                            <span><i class="fas fa-bed"></i> 4 Beds</span>
-                            <span><i class="fas fa-bath"></i> 4 Baths</span>
-                            <span><i class="fas fa-ruler-combined"></i> 2500 sqft</span>
-                        </div>
-                        <div style="font-weight:600; color:var(--secondary-color); margin-bottom:8px;">৳ 85,000 / Month</div>
-                        <a href="property-details.php" class="btn btn-secondary" style="padding:8px 20px; font-size:0.95rem;">View Details</a>
-                    </div>
-                </div>
-                <!-- <div class="property-card">
-                    <div class="card-image">
-                        <img src="https://images.pexels.com/photos/259588/pexels-photo-259588.jpeg?auto=compress&cs=tinysrgb&w=600" alt="Elegant Flat in Banani">
-                    </div>
-                    <div class="card-content">
-                        <h3>Elegant Flat in Banani</h3>
-                        <p class="address"><i class="fas fa-map-marker-alt"></i> Banani, Dhaka</p>
-                        <div class="property-specs">
-                            <span><i class="fas fa-bed"></i> 2 Beds</span>
-                            <span><i class="fas fa-bath"></i> 2 Baths</span>
-                            <span><i class="fas fa-ruler-combined"></i> 1100 sqft</span>
-                        </div>
-                        <div style="font-weight:600; color:var(--secondary-color); margin-bottom:8px;">৳ 30,000 / Month</div>
-                        <a href="#" class="btn btn-secondary" style="padding:8px 20px; font-size:0.95rem;">View Details</a>
-                    </div>
-                </div> -->
-                <div class="property-card">
-                    <div class="card-image">
-                        <img src="https://images.pexels.com/photos/1571460/pexels-photo-1571460.jpeg?auto=compress&cs=tinysrgb&w=600" alt="Sunny Studio in Shyamoli">
-                    </div>
-                    <div class="card-content">
-                        <h3>Sunny Studio in Shyamoli</h3>
-                        <p class="address"><i class="fas fa-map-marker-alt"></i> Shyamoli, Dhaka</p>
-                        <div class="property-specs">
-                            <span><i class="fas fa-bed"></i> 1 Bed</span>
-                            <span><i class="fas fa-bath"></i> 1 Bath</span>
-                            <span><i class="fas fa-ruler-combined"></i> 500 sqft</span>
-                        </div>
-                        <div style="font-weight:600; color:var(--secondary-color); margin-bottom:8px;">৳ 10,500 / Month</div>
-                        <a href="property-details.php" class="btn btn-secondary" style="padding:8px 20px; font-size:0.95rem;">View Details</a>
-                    </div>
-                </div>
-                <div class="property-card">
-                    <div class="card-image">
-                        <img src="https://images.pexels.com/photos/1396122/pexels-photo-1396122.jpeg?auto=compress&cs=tinysrgb&w=600" alt="Family Apartment in Baridhara">
-                    </div>
-                    <div class="card-content">
-                        <h3>Family Apartment in Baridhara</h3>
-                        <p class="address"><i class="fas fa-map-marker-alt"></i> Baridhara, Dhaka</p>
-                        <div class="property-specs">
-                            <span><i class="fas fa-bed"></i> 3 Beds</span>
-                            <span><i class="fas fa-bath"></i> 3 Baths</span>
-                            <span><i class="fas fa-ruler-combined"></i> 1600 sqft</span>
-                        </div>
-                        <div style="font-weight:600; color:var(--secondary-color); margin-bottom:8px;">৳ 38,000 / Month</div>
-                        <a href="property-details.php" class="btn btn-secondary" style="padding:8px 20px; font-size:0.95rem;">View Details</a>
-                    </div>
-                </div>
-                <div class="property-card">
-                    <div class="card-image">
-                        <img src="https://images.pexels.com/photos/1571458/pexels-photo-1571458.jpeg?auto=compress&cs=tinysrgb&w=600" alt="Classic Home in Lalmatia">
-                    </div>
-                    <div class="card-content">
-                        <h3>Classic Home in Lalmatia</h3>
-                        <p class="address"><i class="fas fa-map-marker-alt"></i> Lalmatia, Dhaka</p>
-                        <div class="property-specs">
-                            <span><i class="fas fa-bed"></i> 2 Beds</span>
-                            <span><i class="fas fa-bath"></i> 2 Baths</span>
-                            <span><i class="fas fa-ruler-combined"></i> 950 sqft</span>
-                        </div>
-                        <div style="font-weight:600; color:var(--secondary-color); margin-bottom:8px;">৳ 22,000 / Month</div>
-                        <a href="property-details.php" class="btn btn-secondary" style="padding:8px 20px; font-size:0.95rem;">View Details</a>
-                     </div>
-                </div>
+                <?php endif; ?>
             </div>
-            <div class="pagination">
-                <a href="#">First</a>
-                <a href="#" class="active">1</a>
-                <a href="#">2</a>
-                <a href="#">3</a>
-                <a href="#">Next</a>
-            </div>
-        
         </section>
         
 
@@ -570,3 +508,7 @@ document.addEventListener('DOMContentLoaded', function() {
 </body>
 
 </html>
+
+
+
+

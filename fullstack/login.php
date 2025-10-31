@@ -1,3 +1,47 @@
+<?php
+    // Check if user is already logged in
+require_once 'includes/auth.php';
+
+// Start session if not already started
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+// Clear any existing session data to prevent conflicts
+if (!isset($_GET['keep_session'])) {
+    session_unset();
+}
+
+$auth = new Auth();
+
+// Only check remember me token if not logged in
+if (!$auth->isLoggedIn()) {
+    $auth->checkRememberToken();
+}
+
+// If already logged in, redirect to appropriate dashboard
+if ($auth->isLoggedIn()) {
+    $redirect_url = 'index.php';
+    
+    switch ($_SESSION['role']) {
+        case 'admin':
+            $redirect_url = 'admin/index.php';
+            break;
+        case 'landlord':
+            $redirect_url = 'landlord/index.php';
+            break;
+        case 'tenant':
+            $redirect_url = 'tenant/index.php';
+            break;
+    }
+    
+    header('Location: ' . $redirect_url);
+    exit();
+}
+
+// Check for registration success message
+$registration_success = isset($_GET['registered']) && $_GET['registered'] == '1';
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -83,6 +127,7 @@
             margin-right: 10px;
             font-size: 1.1rem;
         }
+        .auth-main input[type="text"],
         .auth-main input[type="email"],
         .auth-main input[type="password"] {
             border: none;
@@ -91,6 +136,7 @@
             font-size: 1rem;
             width: 100%;
             font-family: inherit;
+            font-weight: 400;
         }
         .auth-main .btn {
             background: linear-gradient(90deg, #16a085 60%, #2980b9 100%);
@@ -193,17 +239,30 @@
     <div class="auth-main">
         <div class="auth-logo"><i class="fa-solid fa-house-chimney-window"></i> AmarThikana</div>
         <h2>Sign in to your account</h2>
-        <form>
+        <?php if ($registration_success): ?>
+        <div style="background: #d4edda; color: #155724; padding: 12px; border-radius: 8px; margin-bottom: 15px; text-align: center;">
+            <i class="fas fa-check-circle"></i> Registration successful! Please log in with your credentials.
+        </div>
+        <?php endif; ?>
+        <div id="message"></div>
+        <form id="loginForm">
+            <?php $csrf_token = $auth->generateCSRFToken(); ?>
+            <input type="hidden" name="csrf_token" value="<?php echo $csrf_token; ?>">
             <div class="input-group">
                 <i class="fas fa-envelope"></i>
-                <input type="email" placeholder="Email Address" required>
+                <input type="text" name="username" id="username" placeholder="Email or Username" required>
             </div>
             <div class="input-group">
                 <i class="fas fa-lock"></i>
-                <input type="password" placeholder="Password" required>
+                <input type="password" name="password" id="password" placeholder="Password" required>
             </div>
-            <a href="forget-pass.php" class="forgot-link">Forgot password?</a>
-            <button type="submit" class="btn">Login</button>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem;">
+                <label style="font-size: 0.9rem; color: #555; cursor: pointer;">
+                    <input type="checkbox" name="remember_me" style="margin-right: 5px;"> Remember me
+                </label>
+                <a href="forget-pass.php" class="forgot-link" style="margin: 0;">Forgot password?</a>
+            </div>
+            <button type="submit" class="btn" id="loginBtn">Login</button>
         </form>
         <div class="auth-links">
             Don't have an account?
@@ -215,5 +274,87 @@
             <button title="Login with Facebook"><i class="fab fa-facebook-f"></i></button>
         </div>
     </div>
+
+    <script>
+        function showError(message) {
+            const messageDiv = document.getElementById('message');
+            messageDiv.innerHTML = '<div style="background: #f8d7da; color: #721c24; padding: 12px; border-radius: 8px; margin-bottom: 15px;">' + message + '</div>';
+        }
+
+        function showSuccess(message) {
+            const messageDiv = document.getElementById('message');
+            messageDiv.innerHTML = '<div style="background: #d4edda; color: #155724; padding: 12px; border-radius: 8px; margin-bottom: 15px;">' + message + '</div>';
+        }
+
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const btn = document.getElementById('loginBtn');
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            // Basic validation
+            if (!username || !password) {
+                showError('Please fill in all fields');
+                return;
+            }
+            const messageDiv = document.getElementById('message');
+            const formData = new FormData(this);
+            
+            btn.disabled = true;
+            btn.textContent = 'Logging in...';
+            messageDiv.innerHTML = '';
+            
+            try {
+                const response = await fetch('api/login_handler.php', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                // Check if response is ok
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                // Get response text first to check if it's valid JSON
+                const text = await response.text();
+                console.log('Response text:', text); // Debug log
+                
+                let result;
+                try {
+                    result = JSON.parse(text);
+                } catch (e) {
+                    console.error('JSON parse error:', e);
+                    console.error('Response was:', text);
+                    throw new Error('Invalid response from server. Check browser console for details.');
+                }
+                
+                if (result.success) {
+                    messageDiv.innerHTML = '<div style="background: #d4edda; color: #155724; padding: 12px; border-radius: 8px; margin-bottom: 15px;">' + result.message + '</div>';
+                    setTimeout(() => {
+                        window.location.href = result.redirect;
+                    }, 1000);
+                } else {
+                    // Show error message with debug info if available
+                    let errorMsg = result.message;
+                    if (result.debug) {
+                        errorMsg += '<br><small style="font-size:0.85em;">Debug: ' + result.debug + '</small>';
+                    }
+                    messageDiv.innerHTML = '<div style="background: #f8d7da; color: #721c24; padding: 12px; border-radius: 8px; margin-bottom: 15px;">' + errorMsg + '</div>';
+                    btn.disabled = false;
+                    btn.textContent = 'Login';
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                messageDiv.innerHTML = '<div style="background: #f8d7da; color: #721c24; padding: 12px; border-radius: 8px; margin-bottom: 15px;">Error: ' + error.message + '<br><small>Check browser console (F12) for details.</small></div>';
+                btn.disabled = false;
+                btn.textContent = 'Login';
+            }
+        });
+    </script>
 </body>
 </html>
+
+
+
+

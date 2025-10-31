@@ -735,212 +735,82 @@
             </div>
 
             <div class="properties-grid" id="propertiesGrid">
-                <!-- Property Card 1 -->
-                <div class="property-card" data-category="apartment" data-price="25000" data-bedrooms="3">
-                    <div class="property-image">
-                        <img src="https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=500" alt="Property">
-                        <div class="property-badge">Featured</div>
-                        <button class="wishlist-btn"><i class="far fa-heart"></i></button>
-                    </div>
-                    <div class="property-info">
-                        <div class="property-price">৳25,000 <span>/month</span></div>
-                        <h3 class="property-title">Modern 3BR Apartment</h3>
-                        <div class="property-location">
-                            <i class="fas fa-map-marker-alt"></i>
-                            <span>Dhanmondi, Dhaka</span>
-                        </div>
-                        <div class="property-features">
-                            <div class="feature-item">
-                                <i class="fas fa-bed"></i>
-                                <span>3 Beds</span>
-                            </div>
-                            <div class="feature-item">
-                                <i class="fas fa-bath"></i>
-                                <span>2 Baths</span>
-                            </div>
-                            <div class="feature-item">
-                                <i class="fas fa-ruler-combined"></i>
-                                <span>1,500 sqft</span>
-                            </div>
-                        </div>
-                        <div class="property-footer">
-                            <span class="property-type">Apartment</span>
-                            <button class="view-details-btn">View Details</button>
-                        </div>
-                    </div>
-                </div>
+                <?php
+                // Include database connection
+                require_once __DIR__ . '/config/database.php';
 
-                <!-- Property Card 2 -->
-                <div class="property-card" data-category="house" data-price="45000" data-bedrooms="4">
-                    <div class="property-image">
-                        <img src="https://images.unsplash.com/photo-1605146769289-440113cc3d00?w=500" alt="Property">
-                        <button class="wishlist-btn"><i class="far fa-heart"></i></button>
-                    </div>
-                    <div class="property-info">
-                        <div class="property-price">৳45,000 <span>/month</span></div>
-                        <h3 class="property-title">Luxury Family House</h3>
-                        <div class="property-location">
-                            <i class="fas fa-map-marker-alt"></i>
-                            <span>Gulshan, Dhaka</span>
-                        </div>
-                        <div class="property-features">
-                            <div class="feature-item">
-                                <i class="fas fa-bed"></i>
-                                <span>4 Beds</span>
-                            </div>
-                            <div class="feature-item">
-                                <i class="fas fa-bath"></i>
-                                <span>3 Baths</span>
-                            </div>
-                            <div class="feature-item">
-                                <i class="fas fa-ruler-combined"></i>
-                                <span>2,500 sqft</span>
-                            </div>
-                        </div>
-                        <div class="property-footer">
-                            <span class="property-type">House</span>
-                            <button class="view-details-btn">View Details</button>
-                        </div>
-                    </div>
-                </div>
+                // Basic filter handling (can be expanded)
+                $where = [];
+                $params = [];
+                $types = '';
 
-                <!-- Property Card 3 -->
-                <div class="property-card" data-category="studio" data-price="12000" data-bedrooms="1">
-                    <div class="property-image">
-                        <img src="https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=500" alt="Property">
-                        <div class="property-badge">New</div>
-                        <button class="wishlist-btn"><i class="far fa-heart"></i></button>
-                    </div>
-                    <div class="property-info">
-                        <div class="property-price">৳12,000 <span>/month</span></div>
-                        <h3 class="property-title">Cozy Studio Apartment</h3>
-                        <div class="property-location">
-                            <i class="fas fa-map-marker-alt"></i>
-                            <span>Banani, Dhaka</span>
-                        </div>
-                        <div class="property-features">
-                            <div class="feature-item">
-                                <i class="fas fa-bed"></i>
-                                <span>Studio</span>
-                            </div>
-                            <div class="feature-item">
-                                <i class="fas fa-bath"></i>
-                                <span>1 Bath</span>
-                            </div>
-                            <div class="feature-item">
-                                <i class="fas fa-ruler-combined"></i>
-                                <span>650 sqft</span>
-                            </div>
-                        </div>
-                        <div class="property-footer">
-                            <span class="property-type">Studio</span>
-                            <button class="view-details-btn">View Details</button>
-                        </div>
-                    </div>
-                </div>
+                if (!empty($_GET['city'])) {
+                    $where[] = 'city = ?';
+                    $params[] = $_GET['city'];
+                    $types .= 's';
+                }
+                if (!empty($_GET['type'])) {
+                    $where[] = 'property_type = ?';
+                    $params[] = $_GET['type'];
+                    $types .= 's';
+                }
 
-                <!-- Property Card 4 -->
-                <div class="property-card" data-category="apartment" data-price="18000" data-bedrooms="2">
-                    <div class="property-image">
-                        <img src="https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=500" alt="Property">
-                        <button class="wishlist-btn"><i class="far fa-heart"></i></button>
-                    </div>
-                    <div class="property-info">
-                        <div class="property-price">৳18,000 <span>/month</span></div>
-                        <h3 class="property-title">Spacious 2BR Flat</h3>
-                        <div class="property-location">
-                            <i class="fas fa-map-marker-alt"></i>
-                            <span>Uttara, Dhaka</span>
-                        </div>
-                        <div class="property-features">
-                            <div class="feature-item">
-                                <i class="fas fa-bed"></i>
-                                <span>2 Beds</span>
-                            </div>
-                            <div class="feature-item">
-                                <i class="fas fa-bath"></i>
-                                <span>2 Baths</span>
-                            </div>
-                            <div class="feature-item">
-                                <i class="fas fa-ruler-combined"></i>
-                                <span>1,100 sqft</span>
-                            </div>
-                        </div>
-                        <div class="property-footer">
-                            <span class="property-type">Apartment</span>
-                            <button class="view-details-btn">View Details</button>
-                        </div>
-                    </div>
-                </div>
+                $sql = "SELECT id, title, price, CONCAT(COALESCE(address,''), CASE WHEN city IS NOT NULL AND city!='' THEN CONCAT(', ', city) ELSE '' END) AS location, bedrooms AS beds, bathrooms AS baths, area_sqft AS sqft, main_image, property_type FROM properties WHERE status = 'available'";
+                if ($where) $sql .= ' AND ' . implode(' AND ', $where);
+                $sql .= ' ORDER BY created_at DESC';
 
-                <!-- Property Card 5 -->
-                <div class="property-card" data-category="duplex" data-price="55000" data-bedrooms="5">
-                    <div class="property-image">
-                        <img src="https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=500" alt="Property">
-                        <div class="property-badge">Featured</div>
-                        <button class="wishlist-btn"><i class="far fa-heart"></i></button>
-                    </div>
-                    <div class="property-info">
-                        <div class="property-price">৳55,000 <span>/month</span></div>
-                        <h3 class="property-title">Premium Duplex Villa</h3>
-                        <div class="property-location">
-                            <i class="fas fa-map-marker-alt"></i>
-                            <span>Baridhara, Dhaka</span>
-                        </div>
-                        <div class="property-features">
-                            <div class="feature-item">
-                                <i class="fas fa-bed"></i>
-                                <span>5 Beds</span>
-                            </div>
-                            <div class="feature-item">
-                                <i class="fas fa-bath"></i>
-                                <span>4 Baths</span>
-                            </div>
-                            <div class="feature-item">
-                                <i class="fas fa-ruler-combined"></i>
-                                <span>3,200 sqft</span>
-                            </div>
-                        </div>
-                        <div class="property-footer">
-                            <span class="property-type">Duplex</span>
-                            <button class="view-details-btn">View Details</button>
-                        </div>
-                    </div>
-                </div>
+                $rows = [];
+                if ($stmt = $conn->prepare($sql)) {
+                    if ($params) {
+                        $stmt->bind_param($types, ...$params);
+                    }
+                    $stmt->execute();
+                    $res = $stmt->get_result();
+                    while ($r = $res->fetch_assoc()) $rows[] = $r;
+                    $stmt->close();
+                }
 
-                <!-- Property Card 6 -->
-                <div class="property-card" data-category="apartment" data-price="22000" data-bedrooms="3">
-                    <div class="property-image">
-                        <img src="https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=500" alt="Property">
-                        <button class="wishlist-btn"><i class="far fa-heart"></i></button>
+                if (!$rows): ?>
+                    <div class="no-results">
+                        <i class="fas fa-search"></i>
+                        <h3>No Properties Found</h3>
+                        <p>Try adjusting your search criteria or browse all properties.</p>
                     </div>
-                    <div class="property-info">
-                        <div class="property-price">৳22,000 <span>/month</span></div>
-                        <h3 class="property-title">Bright 3BR Apartment</h3>
-                        <div class="property-location">
-                            <i class="fas fa-map-marker-alt"></i>
-                            <span>Mirpur DOHS, Dhaka</span>
+                <?php else: foreach ($rows as $row): ?>
+                    <div class="property-card" data-category="<?php echo htmlspecialchars($row['property_type']) ?>" data-price="<?php echo (int)$row['price'] ?>" data-bedrooms="<?php echo (int)$row['beds'] ?>">
+                        <div class="property-image">
+                            <img src="<?php echo htmlspecialchars($row['main_image'] ?: 'images/default-property.jpg') ?>" alt="<?php echo htmlspecialchars($row['title']) ?>" loading="lazy">
+                            <div class="property-badge">Available</div>
+                            <button class="wishlist-btn"><i class="far fa-heart"></i></button>
                         </div>
-                        <div class="property-features">
-                            <div class="feature-item">
-                                <i class="fas fa-bed"></i>
-                                <span>3 Beds</span>
+                        <div class="property-info">
+                            <div class="property-price">৳<?php echo number_format($row['price']) ?> <span>/month</span></div>
+                            <h3 class="property-title"><?php echo htmlspecialchars($row['title']) ?></h3>
+                            <div class="property-location">
+                                <i class="fas fa-map-marker-alt"></i>
+                                <span><?php echo htmlspecialchars($row['location']) ?></span>
                             </div>
-                            <div class="feature-item">
-                                <i class="fas fa-bath"></i>
-                                <span>2 Baths</span>
+                            <div class="property-features">
+                                <div class="feature-item">
+                                    <i class="fas fa-bed"></i>
+                                    <span><?php echo (int)$row['beds'] ?> Beds</span>
+                                </div>
+                                <div class="feature-item">
+                                    <i class="fas fa-bath"></i>
+                                    <span><?php echo (int)$row['baths'] ?> Baths</span>
+                                </div>
+                                <div class="feature-item">
+                                    <i class="fas fa-ruler-combined"></i>
+                                    <span><?php echo (int)$row['sqft'] ?> sqft</span>
+                                </div>
                             </div>
-                            <div class="feature-item">
-                                <i class="fas fa-ruler-combined"></i>
-                                <span>1,400 sqft</span>
+                            <div class="property-footer">
+                                <span class="property-type"><?php echo htmlspecialchars(ucfirst($row['property_type'])) ?></span>
+                                <a href="property-details.php?id=<?php echo (int)$row['id'] ?>" class="view-details-btn">View Details</a>
                             </div>
-                        </div>
-                        <div class="property-footer">
-                            <span class="property-type">Apartment</span>
-                            <button class="view-details-btn">View Details</button>
                         </div>
                     </div>
-                </div>
+                <?php endforeach; endif; ?>
             </div>
 
             <!-- Pagination -->
@@ -1064,22 +934,109 @@
                 card.classList.add('active');
                 
                 const category = card.dataset.category;
-                filterProperties(category);
+                filterProperties();
             });
         });
 
-        function filterProperties(category) {
+        // Price Filter
+        document.getElementById('priceFilter').addEventListener('change', filterProperties);
+
+        // Bedroom Filter
+        document.getElementById('bedroomFilter').addEventListener('change', filterProperties);
+
+        // City Filter
+        document.getElementById('cityFilter').addEventListener('change', filterProperties);
+
+        // Sort Filter
+        document.getElementById('sortFilter').addEventListener('change', filterProperties);
+
+        function filterProperties() {
+            const category = document.querySelector('.category-card.active').dataset.category;
+            const priceRange = document.getElementById('priceFilter').value;
+            const bedroomFilter = document.getElementById('bedroomFilter').value;
+            const cityFilter = document.getElementById('cityFilter').value;
+            const sortBy = document.getElementById('sortFilter').value;
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+
             let visibleCount = 0;
-            propertyCards.forEach(card => {
-                if (category === 'all' || card.dataset.category === category) {
+            const cards = document.querySelectorAll('.property-card');
+            const cardsArray = Array.from(cards);
+
+            cardsArray.forEach(card => {
+                const cardCategory = card.dataset.category;
+                const cardPrice = parseInt(card.dataset.price);
+                const cardBedrooms = parseInt(card.dataset.bedrooms);
+                const title = card.querySelector('.property-title').textContent.toLowerCase();
+                const location = card.querySelector('.property-location span').textContent.toLowerCase();
+
+                let show = true;
+
+                // Category filter
+                if (category !== 'all' && cardCategory !== category) {
+                    show = false;
+                }
+
+                // Price filter
+                if (priceRange) {
+                    const [min, max] = priceRange.split('-').map(v => v === '+' ? Infinity : parseInt(v));
+                    if (cardPrice < min || (max !== Infinity && cardPrice > max)) {
+                        show = false;
+                    }
+                }
+
+                // Bedroom filter
+                if (bedroomFilter) {
+                    if (bedroomFilter === '4+' && cardBedrooms < 4) {
+                        show = false;
+                    } else if (bedroomFilter !== '4+' && cardBedrooms !== parseInt(bedroomFilter)) {
+                        show = false;
+                    }
+                }
+
+                // Search filter
+                if (searchTerm && !title.includes(searchTerm) && !location.includes(searchTerm)) {
+                    show = false;
+                }
+
+                if (show) {
                     card.style.display = 'block';
                     visibleCount++;
                 } else {
                     card.style.display = 'none';
                 }
             });
+
+            // Sort cards
+            if (sortBy !== 'featured') {
+                const grid = document.getElementById('propertiesGrid');
+                const visibleCards = cardsArray.filter(card => card.style.display !== 'none');
+                
+                visibleCards.sort((a, b) => {
+                    const priceA = parseInt(a.dataset.price);
+                    const priceB = parseInt(b.dataset.price);
+                    
+                    switch(sortBy) {
+                        case 'price-low':
+                            return priceA - priceB;
+                        case 'price-high':
+                            return priceB - priceA;
+                        case 'newest':
+                            // For now, keep original order (would need timestamp data)
+                            return 0;
+                        default:
+                            return 0;
+                    }
+                });
+                
+                visibleCards.forEach(card => grid.appendChild(card));
+            }
+
             document.getElementById('resultCount').textContent = visibleCount;
         }
+
+        // Search Filter
+        const searchInput = document.getElementById('searchInput');
+        searchInput.addEventListener('input', filterProperties);
 
         // View Toggle
         const viewBtns = document.querySelectorAll('.view-btn');
@@ -1115,43 +1072,19 @@
             });
         });
 
-        // Search Filter
-        const searchInput = document.getElementById('searchInput');
-        searchInput.addEventListener('input', (e) => {
-            const searchTerm = e.target.value.toLowerCase();
-            let visibleCount = 0;
-            
-            propertyCards.forEach(card => {
-                const title = card.querySelector('.property-title').textContent.toLowerCase();
-                const location = card.querySelector('.property-location span').textContent.toLowerCase();
-                
-                if (title.includes(searchTerm) || location.includes(searchTerm)) {
-                    card.style.display = 'block';
-                    visibleCount++;
-                } else {
-                    card.style.display = 'none';
-                }
-            });
-            
-            document.getElementById('resultCount').textContent = visibleCount;
-        });
-
         // Property Card Click
         propertyCards.forEach(card => {
             card.addEventListener('click', (e) => {
                 if (!e.target.closest('.wishlist-btn') && !e.target.closest('.view-details-btn')) {
-                    window.location.href = 'property-details.php';
+                    const link = card.querySelector('.view-details-btn');
+                    if (link) window.location.href = link.href;
                 }
-            });
-        });
-
-        // View Details Button
-        document.querySelectorAll('.view-details-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                window.location.href = 'property-details.php';
             });
         });
     </script>
 </body>
 </html>
+
+
+
+

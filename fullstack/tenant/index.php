@@ -1,3 +1,128 @@
+<?php
+session_start();
+require_once '../config/database.php';
+require_once '../includes/auth.php';
+
+// Prevent browser caching
+header("Cache-Control: no-cache, no-store, must-revalidate");
+header("Pragma: no-cache");
+header("Expires: 0");
+
+// Check if user is logged in and is a tenant
+if (!isLoggedIn() || $_SESSION['role'] !== 'tenant') {
+    header('Location: ../login.php');
+    exit();
+}
+
+// Initialize database connection
+$db = new Database();
+$pdo = $db->connect();
+global $pdo; // Make $pdo available globally for helper functions
+
+// Get tenant information
+$user_id = $_SESSION['user_id'];
+$user = getUserById($user_id);
+$tenant_name = $user['full_name'] ?? 'Tenant';
+
+// Parse name into first and last name
+$name_parts = explode(' ', $tenant_name, 2);
+$first_name = $name_parts[0] ?? '';
+$last_name = $name_parts[1] ?? '';
+
+// Get user data for form population
+$user_email = $user['email'] ?? '';
+$user_phone = $user['phone'] ?? '';
+$user_address = $user['address'] ?? '';
+$user_city = $user['city'] ?? '';
+$user_postal_code = $user['postal_code'] ?? '';
+$user_date_of_birth = $user['date_of_birth'] ?? '';
+
+// Get tenant's bookings
+try {
+    $stmt = $pdo->prepare("
+        SELECT
+            b.booking_id,
+            b.check_in_date,
+            b.check_out_date,
+            b.guests,
+            b.total_price,
+            b.status,
+            b.message,
+            b.created_at,
+            p.title as property_title,
+            p.address,
+            p.main_image,
+            u.full_name as landlord_name,
+            u.email as landlord_email,
+            u.phone as landlord_phone
+        FROM bookings b
+        JOIN properties p ON b.property_id = p.property_id
+        JOIN users u ON p.landlord_id = u.user_id
+        WHERE b.tenant_id = ?
+        ORDER BY b.created_at DESC
+    ");
+    $stmt->execute([$user_id]);
+    $bookings = $stmt->fetchAll();
+} catch (PDOException $e) {
+    $bookings = [];
+}
+
+// Get booking statistics
+try {
+    $stmt = $pdo->prepare("
+        SELECT 
+            COUNT(*) as total_bookings,
+            COUNT(CASE WHEN status = 'approved' THEN 1 END) as approved_bookings,
+            COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_bookings,
+            COUNT(CASE WHEN status = 'rejected' THEN 1 END) as rejected_bookings
+        FROM bookings 
+        WHERE tenant_id = ?
+    ");
+    $stmt->execute([$user_id]);
+    $stats = $stmt->fetch();
+    
+    $total_bookings = $stats['total_bookings'] ?? 0;
+    $approved_bookings = $stats['approved_bookings'] ?? 0;
+    $pending_bookings = $stats['pending_bookings'] ?? 0;
+    $rejected_bookings = $stats['rejected_bookings'] ?? 0;
+} catch (PDOException $e) {
+    $total_bookings = 0;
+    $approved_bookings = 0;
+    $pending_bookings = 0;
+    $rejected_bookings = 0;
+}
+
+// Get tenant's reviews
+try {
+    $stmt = $pdo->prepare("
+        SELECT 
+            r.review_id,
+            r.rating,
+            r.review_text,
+            r.created_at,
+            r.landlord_response,
+            p.title as property_title,
+            p.address,
+            p.main_image as property_image
+        FROM reviews r
+        JOIN properties p ON r.property_id = p.property_id
+        WHERE r.tenant_id = ?
+        ORDER BY r.created_at DESC
+    ");
+    $stmt->execute([$user_id]);
+    $reviews = $stmt->fetchAll();
+} catch (PDOException $e) {
+    $reviews = [];
+}
+
+// Get profile image URL
+if (!empty($user['profile_image']) && file_exists('../uploads/' . $user['profile_image'])) {
+    $profile_image_url = '../uploads/' . $user['profile_image'];
+} else {
+    // Use UI Avatars as fallback
+    $profile_image_url = 'https://ui-avatars.com/api/?name=' . urlencode($tenant_name) . '&background=1abc9c&color=fff&size=160';
+}
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1037,6 +1162,17 @@
             .modal {
                 width: 95%;
                 max-width: none;
+                max-height: 90vh;
+            }
+
+            .modal-header,
+            .modal-body,
+            .modal-footer {
+                padding: 20px;
+            }
+
+            .modal-header h2 {
+                font-size: 1.4rem;
             }
 
             .action-buttons {
@@ -1046,6 +1182,35 @@
             .btn {
                 width: 100%;
                 justify-content: center;
+            }
+
+            /* Message/Chat Responsiveness */
+            .message-container {
+                grid-template-columns: 1fr;
+                height: 550px;
+            }
+
+            .message-list {
+                max-height: 200px;
+            }
+
+            .message-item {
+                padding: 15px;
+            }
+
+            .message-sender img {
+                width: 35px;
+                height: 35px;
+            }
+
+            /* Settings Form */
+            .settings-container {
+                padding: 25px;
+            }
+
+            .profile-picture-upload img {
+                width: 100px;
+                height: 100px;
             }
         }
 
@@ -1110,6 +1275,111 @@
             .modal-footer .btn {
                 width: 100%;
                 min-width: auto;
+            }
+
+            /* Message/Chat Responsiveness */
+            .message-container {
+                grid-template-columns: 1fr;
+                height: 500px;
+            }
+
+            .message-chat-header {
+                padding: 15px;
+            }
+
+            .message-chat-header img {
+                width: 40px;
+                height: 40px;
+            }
+
+            .message-chat-body {
+                padding: 15px;
+            }
+
+            .chat-bubble {
+                max-width: 85%;
+                padding: 10px 15px;
+                font-size: 0.9rem;
+            }
+
+            .message-input-container input {
+                padding: 10px 15px;
+                font-size: 0.9rem;
+            }
+
+            .message-input-container button {
+                padding: 10px 20px;
+            }
+
+            /* Form Responsiveness */
+            .form-group input,
+            .form-group select,
+            .form-group textarea {
+                font-size: 16px; /* Prevents zoom on iOS */
+            }
+
+            /* Review Cards */
+            .review-card {
+                padding: 20px;
+            }
+
+            .review-property img {
+                width: 50px;
+                height: 50px;
+            }
+
+            /* Mobile Menu */
+            .mobile-menu-toggle {
+                width: 50px !important;
+                height: 50px !important;
+                font-size: 20px !important;
+                bottom: 15px !important;
+                right: 15px !important;
+            }
+        }
+
+        /* Extra Small Devices */
+        @media (max-width: 480px) {
+            .modal {
+                width: 100%;
+                height: 100vh;
+                max-height: 100vh;
+                border-radius: 0;
+                margin: 0;
+            }
+
+            .modal-header {
+                padding: 15px;
+            }
+
+            .modal-header h2 {
+                font-size: 1.2rem;
+            }
+
+            .modal-body {
+                padding: 15px;
+                max-height: calc(100vh - 120px);
+            }
+
+            .modal-footer {
+                padding: 15px;
+            }
+
+            .dashboard-content {
+                padding: 10px;
+            }
+
+            .stat-card {
+                padding: 15px;
+            }
+
+            .settings-container {
+                padding: 15px;
+                margin: 0 5px;
+            }
+
+            .message-container {
+                height: 450px;
             }
         }
 
@@ -1254,12 +1524,12 @@
             <!-- Sidebar -->
             <aside class="sidebar" id="tenantSidebar">
                 <div class="sidebar-profile">
-                    <img src="https://randomuser.me/api/portraits/men/32.jpg" alt="Tenant Profile">
-                    <h3>John Smith</h3>
+                    <img src="<?php echo htmlspecialchars($profile_image_url); ?>" alt="<?php echo htmlspecialchars($tenant_name); ?>">
+                    <h3><?php echo htmlspecialchars($tenant_name); ?></h3>
                     <p>Tenant</p>
                 </div>
                 <ul class="sidebar-nav">
-                    <li><a href="#" class="active" onclick="showSection('overview')">
+                    <li><a href="#" class="active" onclick="showSection('dashboard')">
                         <i class="fas fa-th-large"></i> Dashboard
                     </a></li>
                     <li><a href="#" onclick="showSection('bookings')">
@@ -1278,7 +1548,7 @@
                     <li><a href="#" onclick="showSection('settings')">
                         <i class="fas fa-cog"></i> Settings
                     </a></li>
-                    <li><a href="../index.php">
+                    <li><a href="../api/logout.php">
                         <i class="fas fa-sign-out-alt"></i> Logout
                     </a></li>
                 </ul>
@@ -1286,207 +1556,181 @@
 
             <!-- Main Content -->
             <main class="dashboard-content">
-                <!-- Overview Section -->
-                <section id="overview" class="content-section active">
+                <!-- Dashboard Section -->
+                <section id="dashboard" class="content-section active">
                     <div class="dashboard-header">
-                        <h1>Dashboard Overview</h1>
-                        <p class="welcome-message">Welcome back, John! Here's what's happening with your rentals.</p>
+                        <h1>Dashboard</h1>
+                        <p class="welcome-message">Welcome back, <?php echo htmlspecialchars($user['full_name']); ?>! Here's your rental activity.</p>
                     </div>
 
                     <!-- Stats Grid -->
-                    <div class="stats-grid">
+                    <div class="stats-grid tenant-stats">
                         <div class="stat-card">
-                            <i class="fas fa-calendar-check"></i>
-                            <h3>3</h3>
-                            <p>Active Bookings</p>
+                            <div class="stat-card-header">
+                                <div>
+                                    <div class="stat-value"><?php echo $total_bookings; ?></div>
+                                    <div class="stat-label">Total Bookings</div>
+                                </div>
+                                <div class="stat-icon primary">
+                                    <i class="fas fa-calendar-check"></i>
+                                </div>
+                            </div>
+                            <div class="stat-change">All time</div>
                         </div>
+
                         <div class="stat-card">
-                            <i class="fas fa-heart"></i>
-                            <h3>8</h3>
-                            <p>Favorite Properties</p>
+                            <div class="stat-card-header">
+                                <div>
+                                    <div class="stat-value"><?php echo $approved_bookings; ?></div>
+                                    <div class="stat-label">Approved</div>
+                                </div>
+                                <div class="stat-icon success">
+                                    <i class="fas fa-check-circle"></i>
+                                </div>
+                            </div>
+                            <div class="stat-change">Ready to move in</div>
                         </div>
+
                         <div class="stat-card">
-                            <i class="fas fa-star"></i>
-                            <h3>12</h3>
-                            <p>Reviews Written</p>
+                            <div class="stat-card-header">
+                                <div>
+                                    <div class="stat-value"><?php echo $pending_bookings; ?></div>
+                                    <div class="stat-label">Pending</div>
+                                </div>
+                                <div class="stat-icon warning">
+                                    <i class="fas fa-clock"></i>
+                                </div>
+                            </div>
+                            <div class="stat-change">Awaiting approval</div>
                         </div>
+
                         <div class="stat-card">
-                            <i class="fas fa-envelope"></i>
-                            <h3>3</h3>
-                            <p>Unread Messages</p>
+                            <div class="stat-card-header">
+                                <div>
+                                    <div class="stat-value"><?php echo $rejected_bookings; ?></div>
+                                    <div class="stat-label">Rejected</div>
+                                </div>
+                                <div class="stat-icon danger">
+                                    <i class="fas fa-times-circle"></i>
+                                </div>
+                            </div>
+                            <div class="stat-change">Try different properties</div>
                         </div>
                     </div>
 
-                    <!-- Recent Bookings -->
-                    <div class="table-container">
-                        <div class="table-header">
-                            <h2><i class="fas fa-calendar-check"></i> Recent Bookings</h2>
+                    <!-- Quick Actions -->
+                    <div class="section-header">
+                        <h2>Quick Actions</h2>
+                    </div>
+
+                    <div class="dashboard-grid">
+                        <div class="property-card">
+                            <div class="card-image">
+                                <img src="https://images.pexels.com/photos/1396122/pexels-photo-1396122.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1" alt="Find Properties">
+                            </div>
+                            <div class="card-content">
+                                <h3>Find Your Perfect Home</h3>
+                                <p>Browse thousands of rental properties in your area</p>
+                                <div class="card-actions">
+                                    <a href="../properties.php" class="btn btn-primary">
+                                        <i class="fas fa-search"></i> Browse Properties
+                                    </a>
+                                </div>
+                            </div>
                         </div>
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Property</th>
-                                    <th>Check-in</th>
-                                    <th>Check-out</th>
-                                    <th>Status</th>
-                                    <th>Total</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td>
-                                        <div class="property-info">
-                                            <img src="https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400" alt="Property" class="property-img">
-                                            <div class="property-details">
-                                                <h4>Modern Apartment Downtown</h4>
-                                                <p><i class="fas fa-map-marker-alt"></i> Dhaka, Bangladesh</p>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td>Dec 15, 2024</td>
-                                    <td>Dec 22, 2024</td>
-                                    <td><span class="status-badge status-active">Active</span></td>
-                                    <td><strong>৳35,000</strong></td>
-                                    <td>
-                                        <div class="action-buttons">
-                                            <button class="btn btn-primary" onclick="viewBooking(1)">
-                                                <i class="fas fa-eye"></i> View
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td>
-                                        <div class="property-info">
-                                            <img src="https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=400" alt="Property" class="property-img">
-                                            <div class="property-details">
-                                                <h4>Cozy Studio Apartment</h4>
-                                                <p><i class="fas fa-map-marker-alt"></i> Chittagong, Bangladesh</p>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td>Jan 5, 2025</td>
-                                    <td>Jan 12, 2025</td>
-                                    <td><span class="status-badge status-pending">Pending</span></td>
-                                    <td><strong>৳28,000</strong></td>
-                                    <td>
-                                        <div class="action-buttons">
-                                            <button class="btn btn-primary" onclick="viewBooking(2)">
-                                                <i class="fas fa-eye"></i> View
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
+
+                        <div class="property-card">
+                            <div class="card-image">
+                                <img src="https://images.pexels.com/photos/209296/pexels-photo-209296.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1" alt="My Bookings">
+                            </div>
+                            <div class="card-content">
+                                <h3>Manage Your Bookings</h3>
+                                <p>View and track all your rental requests</p>
+                                <div class="card-actions">
+                                    <button class="btn btn-secondary" onclick="showSection('bookings')">
+                                        <i class="fas fa-calendar-check"></i> View Bookings
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="property-card">
+                            <div class="card-image">
+                                <img src="https://images.pexels.com/photos/3184430/pexels-photo-3184430.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1" alt="Favorites">
+                            </div>
+                            <div class="card-content">
+                                <h3>Your Favorites</h3>
+                                <p>Properties you've saved for later</p>
+                                <div class="card-actions">
+                                    <button class="btn btn-secondary" onclick="showSection('favorites')">
+                                        <i class="fas fa-heart"></i> View Favorites
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </section>
 
-                <!-- My Bookings Section -->
+                <!-- Bookings Section -->
                 <section id="bookings" class="content-section">
                     <div class="dashboard-header">
                         <h1>My Bookings</h1>
-                        <p class="welcome-message">View and manage all your property bookings</p>
+                        <p class="welcome-message">Track all your rental requests and bookings.</p>
                     </div>
 
-                    <div class="table-container">
-                        <div class="table-header">
-                            <h2><i class="fas fa-calendar-check"></i> All Bookings</h2>
+                    <div class="bookings-list">
+                        <?php if (empty($bookings)): ?>
+                        <div class="empty-state">
+                            <i class="fas fa-calendar-times"></i>
+                            <h3>No Bookings Yet</h3>
+                            <p>You haven't made any booking requests yet. Start by browsing available properties!</p>
+                            <a href="../properties.php" class="btn btn-primary">
+                                <i class="fas fa-search"></i> Find Properties
+                            </a>
                         </div>
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Property</th>
-                                    <th>Check-in</th>
-                                    <th>Check-out</th>
-                                    <th>Nights</th>
-                                    <th>Status</th>
-                                    <th>Total</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr data-booking-id="1">
-                                    <td>
-                                        <div class="property-info">
-                                            <img src="https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400" alt="Property" class="property-img">
-                                            <div class="property-details">
-                                                <h4>Modern Apartment Downtown</h4>
-                                                <p><i class="fas fa-map-marker-alt"></i> Dhaka, Bangladesh</p>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td>Dec 15, 2024</td>
-                                    <td>Dec 22, 2024</td>
-                                    <td>7</td>
-                                    <td><span class="status-badge status-active">Active</span></td>
-                                    <td><strong>৳35,000</strong></td>
-                                    <td>
-                                        <div class="action-buttons">
-                                            <button class="btn btn-primary" onclick="viewBooking(1)">
-                                                <i class="fas fa-eye"></i> View
-                                            </button>
-                                            <button class="btn btn-danger" onclick="cancelBooking(1)">
-                                                <i class="fas fa-times"></i> Cancel
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <tr data-booking-id="2">
-                                    <td>
-                                        <div class="property-info">
-                                            <img src="https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=400" alt="Property" class="property-img">
-                                            <div class="property-details">
-                                                <h4>Cozy Studio Apartment</h4>
-                                                <p><i class="fas fa-map-marker-alt"></i> Chittagong, Bangladesh</p>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td>Jan 5, 2025</td>
-                                    <td>Jan 12, 2025</td>
-                                    <td>7</td>
-                                    <td><span class="status-badge status-pending">Pending</span></td>
-                                    <td><strong>৳28,000</strong></td>
-                                    <td>
-                                        <div class="action-buttons">
-                                            <button class="btn btn-primary" onclick="viewBooking(2)">
-                                                <i class="fas fa-eye"></i> View
-                                            </button>
-                                            <button class="btn btn-danger" onclick="cancelBooking(2)">
-                                                <i class="fas fa-times"></i> Cancel
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <tr data-booking-id="3">
-                                    <td>
-                                        <div class="property-info">
-                                            <img src="https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=400" alt="Property" class="property-img">
-                                            <div class="property-details">
-                                                <h4>Luxury Villa with Pool</h4>
-                                                <p><i class="fas fa-map-marker-alt"></i> Cox's Bazar, Bangladesh</p>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td>Nov 10, 2024</td>
-                                    <td>Nov 17, 2024</td>
-                                    <td>7</td>
-                                    <td><span class="status-badge status-completed">Completed</span></td>
-                                    <td><strong>৳56,000</strong></td>
-                                    <td>
-                                        <div class="action-buttons">
-                                            <button class="btn btn-primary" onclick="viewBooking(3)">
-                                                <i class="fas fa-eye"></i> View
-                                            </button>
-                                            <button class="btn btn-secondary" onclick="writeReview(3)">
-                                                <i class="fas fa-star"></i> Review
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
+                        <?php else: ?>
+                        <?php foreach ($bookings as $booking): ?>
+                        <div class="booking-item">
+                            <div class="booking-header">
+                                <div class="booking-info">
+                                    <h4><?php echo htmlspecialchars($booking['property_title']); ?></h4>
+                                    <p><?php echo htmlspecialchars($booking['address']); ?></p>
+                                    <p class="booking-meta">
+                                        <span><i class="fas fa-user"></i> <?php echo htmlspecialchars($booking['landlord_name']); ?></span>
+                                        <span><i class="fas fa-envelope"></i> <?php echo htmlspecialchars($booking['landlord_email']); ?></span>
+                                        <span><i class="fas fa-phone"></i> <?php echo htmlspecialchars($booking['landlord_phone']); ?></span>
+                                    </p>
+                                </div>
+                                <div class="booking-status">
+                                    <span class="status-badge booking-status-<?php echo strtolower($booking['status']); ?>">
+                                        <?php echo ucfirst($booking['status']); ?>
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="booking-details">
+                                <div class="booking-dates">
+                                    <span><i class="fas fa-calendar-alt"></i> Check-in: <?php echo date('M d, Y', strtotime($booking['check_in_date'])); ?></span>
+                                    <span><i class="fas fa-calendar-check"></i> Check-out: <?php echo date('M d, Y', strtotime($booking['check_out_date'])); ?></span>
+                                    <span><i class="fas fa-users"></i> Guests: <?php echo $booking['guests']; ?></span>
+                                    <span><i class="fas fa-dollar-sign"></i> Total: $<?php echo number_format($booking['total_price'], 2); ?></span>
+                                </div>
+                                <div class="booking-message">
+                                    <p><strong>Your Message:</strong> <?php echo htmlspecialchars($booking['message']); ?></p>
+                                </div>
+                            </div>
+                            <div class="booking-actions">
+                                <button class="btn btn-secondary" onclick="viewBookingDetails(<?php echo $booking['booking_id']; ?>)">
+                                    <i class="fas fa-eye"></i> View Details
+                                </button>
+                                <?php if ($booking['status'] === 'approved'): ?>
+                                <button class="btn btn-success" onclick="contactLandlord('<?php echo htmlspecialchars($booking['landlord_email']); ?>')">
+                                    <i class="fas fa-envelope"></i> Contact Landlord
+                                </button>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                        <?php endforeach; ?>
+                        <?php endif; ?>
                     </div>
                 </section>
 
@@ -1588,55 +1832,49 @@
                         <p class="welcome-message">Reviews you've written for properties</p>
                     </div>
 
+                    <?php if (empty($reviews)): ?>
+                    <div class="empty-state">
+                        <i class="fas fa-star-half-alt"></i>
+                        <h3>No Reviews Yet</h3>
+                        <p>You haven't written any reviews yet. Complete a booking to share your experience!</p>
+                        <a href="../properties.php" class="btn btn-primary">
+                            <i class="fas fa-search"></i> Find Properties
+                        </a>
+                    </div>
+                    <?php else: ?>
+                    <?php foreach ($reviews as $review): ?>
                     <div class="review-card">
                         <div class="review-header">
                             <div class="review-property">
-                                <img src="https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=400" alt="Property">
+                                <img src="<?php echo htmlspecialchars($review['property_image']); ?>" alt="Property">
                                 <div>
-                                    <h4>Luxury Villa with Pool</h4>
-                                    <p style="color: var(--text-medium); font-size: 0.9rem;">Cox's Bazar, Bangladesh</p>
+                                    <h4><?php echo htmlspecialchars($review['property_title']); ?></h4>
+                                    <p style="color: var(--text-medium); font-size: 0.9rem;"><?php echo htmlspecialchars($review['address']); ?></p>
                                 </div>
                             </div>
                             <div class="review-rating">
-                                <i class="fas fa-star"></i>
-                                <i class="fas fa-star"></i>
-                                <i class="fas fa-star"></i>
-                                <i class="fas fa-star"></i>
-                                <i class="fas fa-star"></i>
+                                <?php for ($i = 1; $i <= 5; $i++): ?>
+                                    <i class="fas fa-star <?php echo $i <= $review['rating'] ? '' : 'far'; ?>"></i>
+                                <?php endfor; ?>
                             </div>
                         </div>
                         <div class="review-content">
-                            "Amazing property! The villa exceeded all expectations. The pool was pristine, the location was perfect, and the host was incredibly responsive. Would definitely book again!"
+                            "<?php echo htmlspecialchars($review['review_text']); ?>"
                         </div>
                         <div class="review-date">
-                            <i class="fas fa-calendar"></i> November 18, 2024
+                            <i class="fas fa-calendar"></i> <?php echo date('F d, Y', strtotime($review['created_at'])); ?>
                         </div>
-                    </div>
-
-                    <div class="review-card">
-                        <div class="review-header">
-                            <div class="review-property">
-                                <img src="https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400" alt="Property">
-                                <div>
-                                    <h4>Modern Apartment Downtown</h4>
-                                    <p style="color: var(--text-medium); font-size: 0.9rem;">Dhaka, Bangladesh</p>
-                                </div>
+                        <?php if (!empty($review['landlord_response'])): ?>
+                        <div class="landlord-response">
+                            <div class="response-header">
+                                <i class="fas fa-reply"></i> <strong>Landlord Response:</strong>
                             </div>
-                            <div class="review-rating">
-                                <i class="fas fa-star"></i>
-                                <i class="fas fa-star"></i>
-                                <i class="fas fa-star"></i>
-                                <i class="fas fa-star"></i>
-                                <i class="far fa-star"></i>
-                            </div>
+                            <p><?php echo htmlspecialchars($review['landlord_response']); ?></p>
                         </div>
-                        <div class="review-content">
-                            "Great location in the heart of the city. The apartment was clean and well-maintained. Only minor issue was some noise from the street, but overall a great stay!"
-                        </div>
-                        <div class="review-date">
-                            <i class="fas fa-calendar"></i> October 5, 2024
-                        </div>
+                        <?php endif; ?>
                     </div>
+                    <?php endforeach; ?>
+                    <?php endif; ?>
                 </section>
 
                 <!-- Messages Section -->
@@ -1746,62 +1984,57 @@
 
                     <div class="settings-container">
                         <div class="profile-picture-upload">
-                            <img src="https://randomuser.me/api/portraits/men/32.jpg" alt="Profile Picture" id="profileImage">
+                            <img src="<?php echo htmlspecialchars($profile_image_url); ?>" alt="Profile Picture" id="profileImage">
                             <div class="upload-btn-wrapper">
-                                <button class="btn btn-primary" onclick="document.getElementById('photoUpload').click()">
+                                <button class="btn btn-primary" onclick="document.getElementById('profileImageInput').click()">
                                     <i class="fas fa-camera"></i> Change Photo
                                 </button>
-                                <input type="file" id="photoUpload" accept="image/*" style="display: none;" onchange="changePhoto(event)">
+                                <input type="file" id="profileImageInput" accept="image/*" onchange="changePhoto(event)">
                             </div>
                         </div>
 
-                        <form>
+                        <form id="settingsForm" onsubmit="saveSettings(event)">
                             <div class="form-row">
                                 <div class="form-group">
                                     <label>First Name *</label>
-                                    <input type="text" value="John" required>
+                                    <input type="text" id="firstName" value="<?php echo htmlspecialchars($first_name); ?>" required>
                                 </div>
                                 <div class="form-group">
                                     <label>Last Name *</label>
-                                    <input type="text" value="Smith" required>
+                                    <input type="text" id="lastName" value="<?php echo htmlspecialchars($last_name); ?>" required>
                                 </div>
                             </div>
 
                             <div class="form-group">
                                 <label>Email Address *</label>
-                                <input type="email" value="john.smith@example.com" required>
+                                <input type="email" id="email" value="<?php echo htmlspecialchars($user_email); ?>" required>
                             </div>
 
                             <div class="form-row">
                                 <div class="form-group">
                                     <label>Phone Number *</label>
-                                    <input type="tel" value="+880 1712-345678" required>
+                                    <input type="tel" id="phone" value="<?php echo htmlspecialchars($user_phone); ?>" required>
                                 </div>
                                 <div class="form-group">
                                     <label>Date of Birth</label>
-                                    <input type="date" value="1990-05-15">
+                                    <input type="date" id="dateOfBirth" value="<?php echo htmlspecialchars($user_date_of_birth); ?>">
                                 </div>
                             </div>
 
                             <div class="form-group">
                                 <label>Address</label>
-                                <input type="text" value="123 Main Street, Dhaka">
+                                <input type="text" id="address" value="<?php echo htmlspecialchars($user_address); ?>">
                             </div>
 
                             <div class="form-row">
                                 <div class="form-group">
                                     <label>City</label>
-                                    <input type="text" value="Dhaka">
+                                    <input type="text" id="city" value="<?php echo htmlspecialchars($user_city); ?>">
                                 </div>
                                 <div class="form-group">
                                     <label>Postal Code</label>
-                                    <input type="text" value="1000">
+                                    <input type="text" id="postalCode" value="<?php echo htmlspecialchars($user_postal_code); ?>">
                                 </div>
-                            </div>
-
-                            <div class="form-group">
-                                <label>Bio</label>
-                                <textarea rows="4" placeholder="Tell us about yourself...">Travel enthusiast and digital nomad. Looking for comfortable and affordable places to stay.</textarea>
                             </div>
 
                             <div class="settings-actions">
@@ -1904,18 +2137,21 @@
                 </button>
             </div>
             <div class="modal-body">
-                <form id="passwordForm" onsubmit="changePassword(event)">
+                <form id="passwordForm">
                     <div class="form-group">
                         <label>Current Password *</label>
                         <input type="password" id="currentPassword" required placeholder="Enter current password">
                     </div>
                     <div class="form-group">
                         <label>New Password *</label>
-                        <input type="password" id="newPassword" required placeholder="Enter new password" minlength="6">
+                        <input type="password" id="newPassword" required placeholder="Enter new password" minlength="8">
+                        <small style="color: #7f8c8d; font-size: 0.85rem;">
+                            Password must be at least 8 characters long and contain at least one number
+                        </small>
                     </div>
                     <div class="form-group">
                         <label>Confirm New Password *</label>
-                        <input type="password" id="confirmPassword" required placeholder="Confirm new password" minlength="6">
+                        <input type="password" id="confirmPassword" required placeholder="Confirm new password" minlength="8">
                     </div>
                 </form>
             </div>
@@ -1923,7 +2159,7 @@
                 <button class="btn btn-danger" onclick="closePasswordModal()">
                     <i class="fas fa-times-circle"></i> Cancel
                 </button>
-                <button class="btn btn-primary" onclick="document.getElementById('passwordForm').requestSubmit()">
+                <button class="btn btn-primary" id="updatePasswordBtn" type="button" onclick="changePassword(event)">
                     <i class="fas fa-check-circle"></i> Update Password
                 </button>
             </div>
@@ -1951,35 +2187,6 @@
             document.getElementById('bookingModal').classList.add('active');
             document.body.style.overflow = 'hidden';
             // Populate modal with booking data based on bookingId
-        }
-
-        function closeBookingModal() {
-            document.getElementById('bookingModal').classList.remove('active');
-            document.body.style.overflow = 'auto';
-        }
-
-        function cancelBooking(bookingId) {
-            if (confirm('Are you sure you want to cancel this booking?')) {
-                // Find all booking rows with this ID and update status
-                const bookingRows = document.querySelectorAll(`[data-booking-id="${bookingId}"]`);
-                bookingRows.forEach(row => {
-                    const statusBadge = row.querySelector('.status-badge');
-                    if (statusBadge) {
-                        statusBadge.className = 'status-badge status-cancelled';
-                        statusBadge.textContent = 'Cancelled';
-                    }
-                    
-                    // Disable cancel button
-                    const cancelBtn = row.querySelector('.btn-danger');
-                    if (cancelBtn) {
-                        cancelBtn.disabled = true;
-                        cancelBtn.style.opacity = '0.5';
-                        cancelBtn.style.cursor = 'not-allowed';
-                    }
-                });
-                
-                alert('Booking cancelled successfully!');
-            }
         }
 
         function writeReview(bookingId) {
@@ -2024,29 +2231,120 @@
         });
 
         // Form submission
-        document.querySelector('.settings-container form')?.addEventListener('submit', function(e) {
-            e.preventDefault();
-            alert('Profile updated successfully!');
-        });
+        async function saveSettings(event) {
+            event.preventDefault();
+            
+            const formData = new FormData();
+            formData.append('first_name', document.getElementById('firstName').value);
+            formData.append('last_name', document.getElementById('lastName').value);
+            formData.append('email', document.getElementById('email').value);
+            formData.append('phone', document.getElementById('phone').value);
+            formData.append('date_of_birth', document.getElementById('dateOfBirth').value);
+            formData.append('address', document.getElementById('address').value);
+            formData.append('city', document.getElementById('city').value);
+            formData.append('postal_code', document.getElementById('postalCode').value);
+
+            try {
+                const response = await fetch('../api/update_profile.php', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('✓ Profile updated successfully!');
+                    // Update the displayed name in sidebar
+                    const fullName = document.getElementById('firstName').value + ' ' + document.getElementById('lastName').value;
+                    document.querySelector('.sidebar-profile h3').textContent = fullName;
+                    
+                    // Refresh the page to show updated values
+                    location.reload();
+                } else {
+                    alert('Error: ' + result.message);
+                }
+            } catch (error) {
+                console.error('Update error:', error);
+                alert('Failed to update profile. Please try again.');
+            }
+        }
 
         // Change Photo Function
-        function changePhoto(event) {
+        async function changePhoto(event) {
             const file = event.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    document.getElementById('profileImage').src = e.target.result;
-                    
-                    // Also update sidebar profile image
-                    const sidebarImg = document.querySelector('.sidebar-profile img');
-                    if (sidebarImg) {
-                        sidebarImg.src = e.target.result;
-                    }
-                    
-                    alert('Profile photo updated successfully!');
-                };
-                reader.readAsDataURL(file);
+            if (!file) return;
+
+            // Validate file type
+            const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+            if (!allowedTypes.includes(file.type)) {
+                alert('Invalid file type. Please select a JPG, PNG, GIF, or WebP image.');
+                event.target.value = ''; // Clear the input
+                return;
             }
+
+            // Validate file size (5MB max)
+            const maxSize = 5 * 1024 * 1024; // 5MB
+            if (file.size > maxSize) {
+                alert('File too large. Maximum size is 5MB.');
+                event.target.value = ''; // Clear the input
+                return;
+            }
+
+            // Show loading state
+            const profileImg = document.getElementById('profileImage');
+            const sidebarImg = document.querySelector('.sidebar-profile img');
+            const originalSrc = profileImg.src;
+
+            // Preview image immediately
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                profileImg.src = e.target.result;
+                if (sidebarImg) {
+                    sidebarImg.src = e.target.result;
+                }
+            };
+            reader.readAsDataURL(file);
+
+            // Upload to server
+            try {
+                const formData = new FormData();
+                formData.append('profile_image', file);
+
+                const response = await fetch('../api/upload_profile_photo.php', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('✓ ' + result.message);
+                    // Update with server URL
+                    const serverUrl = '../' + result.image_url.substring(1);
+                    profileImg.src = serverUrl;
+                    if (sidebarImg) {
+                        sidebarImg.src = serverUrl;
+                    }
+                } else {
+                    alert('Error: ' + result.message);
+                    // Restore original image on error
+                    profileImg.src = originalSrc;
+                    if (sidebarImg) {
+                        sidebarImg.src = originalSrc;
+                    }
+                }
+            } catch (error) {
+                console.error('Upload error:', error);
+                alert('Failed to upload photo. Please try again.');
+                // Restore original image on error
+                profileImg.src = originalSrc;
+                if (sidebarImg) {
+                    sidebarImg.src = originalSrc;
+                }
+            }
+
+            // Clear the input so the same file can be selected again
+            event.target.value = '';
         }
 
         // Password Modal Functions
@@ -2061,26 +2359,77 @@
             document.getElementById('passwordForm').reset();
         }
 
-        function changePassword(event) {
+        async function changePassword(event) {
             event.preventDefault();
             
             const currentPassword = document.getElementById('currentPassword').value;
             const newPassword = document.getElementById('newPassword').value;
             const confirmPassword = document.getElementById('confirmPassword').value;
             
+            // Client-side validation
+            if (!currentPassword || !newPassword || !confirmPassword) {
+                alert('Please fill in all fields!');
+                return;
+            }
+            
             if (newPassword !== confirmPassword) {
                 alert('New passwords do not match!');
                 return;
             }
             
-            if (newPassword.length < 6) {
-                alert('Password must be at least 6 characters long!');
+            if (newPassword.length < 8) {
+                alert('Password must be at least 8 characters long!');
                 return;
             }
             
-            // In real application, this would make an API call
-            alert('Password changed successfully!');
-            closePasswordModal();
+            // Password strength validation - must contain at least one number
+            const hasNumber = /[0-9]/.test(newPassword);
+
+            if (!hasNumber) {
+                alert('Password must contain at least one number');
+                return;
+            }
+            
+            // Show loading state
+            const submitBtn = document.getElementById('updatePasswordBtn');
+            const originalText = submitBtn.innerHTML;
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Changing Password...';
+            
+            try {
+                const response = await fetch('../api/change_password.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        current_password: currentPassword,
+                        new_password: newPassword,
+                        confirm_password: confirmPassword
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('Password changed successfully! ✓\n\nYou will be logged out for security reasons.');
+                    closePasswordModal();
+                    
+                    // Log out the user
+                    setTimeout(() => {
+                        window.location.href = '../api/logout.php';
+                    }, 1000);
+                } else {
+                    alert('Error: ' + result.message);
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = originalText;
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('An error occurred while changing password. Please try again.');
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalText;
+            }
         }
 
         // Close password modal when clicking outside
@@ -2116,3 +2465,7 @@
     </script>
 </body>
 </html>
+
+
+
+

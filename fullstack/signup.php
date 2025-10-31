@@ -1,3 +1,66 @@
+<?php
+// Check if user is already logged in
+require_once 'includes/auth.php';
+
+$auth = new Auth();
+
+// Check remember me token first
+$auth->checkRememberToken();
+
+// If already logged in, redirect to appropriate dashboard
+if ($auth->isLoggedIn()) {
+    $redirect_url = 'index.php';
+    
+    switch ($_SESSION['role']) {
+        case 'admin':
+            $redirect_url = 'admin/index.php';
+            break;
+        case 'landlord':
+            $redirect_url = 'landlord/index.php';
+            break;
+        case 'tenant':
+            $redirect_url = 'tenant/index.php';
+            break;
+    }
+    
+    header('Location: ' . $redirect_url);
+    exit();
+}
+
+// Handle form submission (fallback for when JavaScript is disabled)
+$message = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['form_submitted'])) {
+    // Get POST data
+    $username = sanitize_input($_POST['username'] ?? '');
+    $email = sanitize_input($_POST['email'] ?? '');
+    $password = $_POST['password'] ?? '';
+    $confirm_password = $_POST['confirm_password'] ?? '';
+    $full_name = sanitize_input($_POST['full_name'] ?? '');
+    $phone = sanitize_input($_POST['phone'] ?? '');
+    $role = sanitize_input($_POST['role'] ?? 'tenant');
+
+    // Validate inputs
+    if (empty($username) || empty($email) || empty($password) || empty($full_name)) {
+        $message = '<div style="background: #f8d7da; color: #721c24; padding: 12px; border-radius: 8px; margin-bottom: 15px;">Please fill all required fields</div>';
+    } elseif (!validate_email($email)) {
+        $message = '<div style="background: #f8d7da; color: #721c24; padding: 12px; border-radius: 8px; margin-bottom: 15px;">Invalid email format</div>';
+    } elseif ($password !== $confirm_password) {
+        $message = '<div style="background: #f8d7da; color: #721c24; padding: 12px; border-radius: 8px; margin-bottom: 15px;">Passwords do not match</div>';
+    } elseif (strlen($password) < 6) {
+        $message = '<div style="background: #f8d7da; color: #721c24; padding: 12px; border-radius: 8px; margin-bottom: 15px;">Password must be at least 6 characters long</div>';
+    } else {
+        // Attempt registration
+        $result = $auth->register($username, $email, $password, $full_name, $phone, $role);
+        
+        if ($result['success']) {
+            header('Location: login.php?registered=1');
+            exit();
+        } else {
+            $message = '<div style="background: #f8d7da; color: #721c24; padding: 12px; border-radius: 8px; margin-bottom: 15px;">' . $result['message'] . '</div>';
+        }
+    }
+}
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -159,7 +222,15 @@
       
         <div class="auth-logo"><i class="fa-solid fa-house-chimney-window"></i> AmarThikana</div>
         <h2>Create Your Account</h2>
-        <form action="#">
+        <?php if ($message): ?>
+            <?php echo $message; ?>
+        <?php else: ?>
+            <div id="message"></div>
+        <?php endif; ?>
+        <form id="signupForm" action="signup.php" method="post">
+            <input type="hidden" name="form_submitted" value="1">
+            <?php $csrf_token = $auth->generateCSRFToken(); ?>
+            <input type="hidden" name="csrf_token" value="<?php echo $csrf_token; ?>">
             <div class="role-selector">
                 <input type="radio" id="role-tenant" name="role" value="tenant" checked>
                 <label for="role-tenant">I am a Tenant</label>
@@ -170,43 +241,120 @@
             <div class="form-group">
                 <label for="fullname">Full Name</label>
                 <i class="fas fa-user"></i>
-                <input type="text" id="fullname" placeholder="Enter your full name" required>
+                <input type="text" name="full_name" id="fullname" placeholder="Enter your full name" required>
+            </div>
+
+            <div class="form-group">
+                <label for="username">Username</label>
+                <i class="fas fa-user-circle"></i>
+                <input type="text" name="username" id="username" placeholder="Choose a username" required>
             </div>
 
             <div class="form-group">
                 <label for="email">Email Address</label>
                 <i class="fas fa-envelope"></i>
-                <input type="email" id="email" placeholder="Enter your email" required>
+                <input type="email" name="email" id="email" placeholder="Enter your email" required>
             </div>
 
             <div class="form-group">
                 <label for="phone">Phone Number</label>
                 <i class="fas fa-phone"></i>
-                <input type="tel" id="phone" placeholder="Enter your phone number" required>
+                <input type="tel" name="phone" id="phone" placeholder="Enter your phone number" required>
             </div>
 
             <div class="form-group">
                 <label for="password">Password</label>
                 <i class="fas fa-lock"></i>
-                <input type="password" id="password" placeholder="Create a password" required>
+                <input type="password" name="password" id="password" placeholder="Create a password" required>
             </div>
 
             <div class="form-group">
                 <label for="confirm-password">Confirm Password</label>
                 <i class="fas fa-lock"></i>
-                <input type="password" id="confirm-password" placeholder="Confirm your password" required>
+                <input type="password" name="confirm_password" id="confirm-password" placeholder="Confirm your password" required>
             </div>
 
             <div class="terms-group">
                 <input type="checkbox" id="terms" required>
-                <label for="terms">I agree to the <a href="#">Terms and Conditions</a></label>
+                <label for="terms">I agree to the <a href="terms-of-service.php">Terms and Conditions</a></label>
             </div>
 
-            <button type="submit" class="btn btn-primary">Create Account</button>
+            <button type="submit" class="btn btn-primary" id="signupBtn">Create Account</button>
         </form>
         <p class="login-link">Already have an account? <a href="login.php">Log In</a></p>
     </div>
 </main>
 
+<script>
+    document.getElementById('signupForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        console.log('Form submitted'); // Debug log
+        
+        const btn = document.getElementById('signupBtn');
+        const messageDiv = document.getElementById('message');
+        const formData = new FormData(this);
+
+        console.log('Form data:', Array.from(formData.entries())); // Debug log
+
+        // Validate password
+        const password = document.getElementById('password').value;
+        const confirmPassword = document.getElementById('confirm-password').value;
+
+        if (password.length < 6) {
+            messageDiv.innerHTML = '<div style="background: #f8d7da; color: #721c24; padding: 12px; border-radius: 8px; margin-bottom: 15px;">Password must be at least 6 characters long</div>';
+            return;
+        }
+
+        if (password !== confirmPassword) {
+            messageDiv.innerHTML = '<div style="background: #f8d7da; color: #721c24; padding: 12px; border-radius: 8px; margin-bottom: 15px;">Passwords do not match</div>';
+            return;
+        }
+        
+        btn.disabled = true;
+        btn.textContent = 'Creating Account...';
+        messageDiv.innerHTML = '';
+        
+        console.log('Sending request to api/signup_handler.php'); // Debug log
+        
+        try {
+            const response = await fetch('api/signup_handler.php', {
+                method: 'POST',
+                body: formData
+            });
+            
+            console.log('Response status:', response.status); // Debug log
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const result = await response.json();
+            
+            console.log('Response result:', result); // Debug log
+            
+            if (result.success) {
+                messageDiv.innerHTML = '<div style="background: #d4edda; color: #155724; padding: 12px; border-radius: 8px; margin-bottom: 15px;"><i class="fas fa-check-circle"></i> ' + result.message + '</div>';
+                setTimeout(() => {
+                    window.location.href = result.redirect;
+                }, 1500);
+            } else {
+                messageDiv.innerHTML = '<div style="background: #f8d7da; color: #721c24; padding: 12px; border-radius: 8px; margin-bottom: 15px;">' + result.message + '</div>';
+                btn.disabled = false;
+                btn.textContent = 'Create Account';
+            }
+        } catch (error) {
+            console.error('Signup error:', error); // Debug log
+            messageDiv.innerHTML = '<div style="background: #f8d7da; color: #721c24; padding: 12px; border-radius: 8px; margin-bottom: 15px;">An error occurred: ' + error.message + '. Please try again.</div>';
+            btn.disabled = false;
+            btn.textContent = 'Create Account';
+        }
+    });
+</script>
+
 </body>
 </html>
+
+
+
+
