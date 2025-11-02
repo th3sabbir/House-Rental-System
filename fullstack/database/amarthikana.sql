@@ -34,11 +34,10 @@ CREATE TABLE `bookings` (
   `property_id` int(11) NOT NULL,
   `tenant_id` int(11) NOT NULL,
   `landlord_id` int(11) NOT NULL,
-  `check_in_date` date NOT NULL,
-  `check_out_date` date DEFAULT NULL,
-  `guests` int(11) DEFAULT 1,
+  `start_date` date NOT NULL,
+  `end_date` date DEFAULT NULL,
   `total_amount` decimal(10,2) DEFAULT NULL,
-  `status` enum('pending','confirmed','approved','rejected','cancelled','completed') DEFAULT 'pending',
+  `status` enum('pending','confirmed','rejected','cancelled','completed') DEFAULT 'pending',
   `message` text DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
@@ -105,13 +104,16 @@ CREATE TABLE `properties` (
   `property_type` enum('apartment','house','villa','studio','room') NOT NULL,
   `address` text NOT NULL,
   `city` varchar(100) NOT NULL,
-  `area` varchar(100) DEFAULT NULL,
   `zip_code` varchar(20) DEFAULT NULL,
   `price_per_month` decimal(10,2) NOT NULL,
   `bedrooms` int(11) DEFAULT NULL,
   `bathrooms` int(11) DEFAULT NULL,
+  `balconies` int(11) DEFAULT 0,
   `area_sqft` int(11) DEFAULT NULL,
+  `floor_number` int(11) DEFAULT NULL,
+  `facing` varchar(50) DEFAULT NULL,
   `furnished` enum('furnished','semi-furnished','unfurnished') DEFAULT 'unfurnished',
+  `renter_type` varchar(100) DEFAULT NULL,
   `available_from` date DEFAULT NULL,
   `status` enum('available','rented','maintenance','inactive') DEFAULT 'available',
   `featured` tinyint(1) DEFAULT 0,
@@ -131,6 +133,24 @@ CREATE TABLE `property_amenities` (
   `amenity_id` int(11) NOT NULL,
   `property_id` int(11) NOT NULL,
   `amenity` varchar(100) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `property_details`
+--
+
+CREATE TABLE `property_details` (
+  `detail_id` int(11) NOT NULL,
+  `property_id` int(11) NOT NULL,
+  `balconies` int(11) DEFAULT 0,
+  `floor_number` int(11) DEFAULT NULL,
+  `facing` varchar(50) DEFAULT NULL,
+  `renter_type` varchar(100) DEFAULT NULL,
+  `additional_info` text DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -288,6 +308,13 @@ ALTER TABLE `property_amenities`
   ADD KEY `idx_property` (`property_id`);
 
 --
+-- Indexes for table `property_details`
+--
+ALTER TABLE `property_details`
+  ADD PRIMARY KEY (`detail_id`),
+  ADD KEY `idx_property` (`property_id`);
+
+--
 -- Indexes for table `property_images`
 --
 ALTER TABLE `property_images`
@@ -371,6 +398,12 @@ ALTER TABLE `property_amenities`
   MODIFY `amenity_id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
+-- AUTO_INCREMENT for table `property_details`
+--
+ALTER TABLE `property_details`
+  MODIFY `detail_id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT for table `property_images`
 --
 ALTER TABLE `property_images`
@@ -438,6 +471,12 @@ ALTER TABLE `properties`
 --
 ALTER TABLE `property_amenities`
   ADD CONSTRAINT `property_amenities_ibfk_1` FOREIGN KEY (`property_id`) REFERENCES `properties` (`property_id`) ON DELETE CASCADE;
+
+--
+-- Constraints for table `property_details`
+--
+ALTER TABLE `property_details`
+  ADD CONSTRAINT `property_details_ibfk_1` FOREIGN KEY (`property_id`) REFERENCES `properties` (`property_id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `property_images`
