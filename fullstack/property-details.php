@@ -1,18 +1,135 @@
+<?php
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+require_once 'config/database.php';
+require_once 'includes/auth.php';
+
+$property = null;
+$property_images = [];
+$property_amenities = [];
+$similar_properties = [];
+$error = null;
+$property_id = null;
+
+if (!isset($_GET['id']) || !filter_var($_GET['id'], FILTER_VALIDATE_INT)) {
+    $error = "Invalid property ID.";
+} else {
+    $property_id = (int)$_GET['id'];
+    
+    $sql = "SELECT p.*, u.full_name as landlord_name, u.profile_image as landlord_avatar 
+            FROM properties p 
+            JOIN users u ON p.landlord_id = u.user_id 
+            WHERE p.property_id = ?";
+    
+    if ($stmt = $conn->prepare($sql)) {
+        $stmt->bind_param('i', $property_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        if ($result->num_rows > 0) {
+            $property = $result->fetch_assoc();
+        }
+        $stmt->close();
+    }
+    
+    if ($property) {
+        // Increment view count
+        $update_sql = "UPDATE properties SET views = views + 1 WHERE property_id = ?";
+        if ($update_stmt = $conn->prepare($update_sql)) {
+            $update_stmt->bind_param('i', $property_id);
+            $update_stmt->execute();
+            $update_stmt->close();
+        }
+        
+        // Fetch property images
+        $img_sql = "SELECT image_path, is_primary FROM property_images WHERE property_id = ? ORDER BY is_primary DESC, upload_date ASC";
+        if ($img_stmt = $conn->prepare($img_sql)) {
+            $img_stmt->bind_param('i', $property_id);
+            $img_stmt->execute();
+            $img_result = $img_stmt->get_result();
+            while ($img_row = $img_result->fetch_assoc()) {
+                $property_images[] = $img_row;
+            }
+            $img_stmt->close();
+        }
+        
+        // Fetch property amenities
+        $amenity_sql = "SELECT amenity FROM property_amenities WHERE property_id = ?";
+        if ($amenity_stmt = $conn->prepare($amenity_sql)) {
+            $amenity_stmt->bind_param('i', $property_id);
+            $amenity_stmt->execute();
+            $amenity_result = $amenity_stmt->get_result();
+            while ($amenity_row = $amenity_result->fetch_assoc()) {
+                $property_amenities[] = $amenity_row['amenity'];
+            }
+            $amenity_stmt->close();
+        }
+        
+        // Fetch similar properties
+        $search_city = !empty($property['city']) ? $property['city'] : 'Dhaka';
+        $similar_sql = "SELECT p.*, 
+                        (SELECT image_path FROM property_images WHERE property_id = p.property_id AND is_primary = 1 LIMIT 1) as main_image
+                        FROM properties p 
+                        WHERE p.city = ? 
+                        AND p.property_id != ? 
+                        AND p.status = 'available' 
+                        ORDER BY RAND() 
+                        LIMIT 3";
+        if ($similar_stmt = $conn->prepare($similar_sql)) {
+            $similar_stmt->bind_param('si', $search_city, $property_id);
+            $similar_stmt->execute();
+            $similar_result = $similar_stmt->get_result();
+            while ($similar_row = $similar_result->fetch_assoc()) {
+                $similar_properties[] = $similar_row;
+            }
+            $similar_stmt->close();
+        }
+        
+        // Handle booking request
+        if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_booking'])) {
+            if (isLoggedIn() && $_SESSION['role'] === 'tenant') {
+                $user_id = $_SESSION['user_id'];
+                $start_date = $_POST['move_in_date'];
+                $duration = (int)$_POST['duration'];
+                $message = trim($_POST['message']);
+                $end_date = date('Y-m-d', strtotime($start_date . ' + ' . $duration . ' months'));
+                $total_amount = $property['price_per_month'] * $duration;
+                
+                $insert_sql = "INSERT INTO bookings (property_id, tenant_id, landlord_id, start_date, end_date, total_amount, message, status, created_at) 
+                               VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', NOW())";
+                
+                if ($insert_stmt = $conn->prepare($insert_sql)) {
+                    $insert_stmt->bind_param('iiissds', $property_id, $user_id, $property['landlord_id'], $start_date, $end_date, $total_amount, $message);
+                    if ($insert_stmt->execute()) {
+                        $success_message = 'Booking request submitted successfully!';
+                    } else {
+                        $error_message = 'Error submitting booking request.';
+                    }
+                    $insert_stmt->close();
+                }
+            }
+        }
+    } else {
+        $error = 'Property not found';
+    }
+}
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo $property ? htmlspecialchars($property['title']) : 'Property Details'; ?> - HouseRental</title>
+    <title><?php echo $property ? htmlspecialchars($property['title']) : 'Property Details'; ?> - AmarThikana</title>
+    
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.1/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
 
-    <!-- jQuery -->
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <style>
-        
         body { background-color: #f8f9fa; }
     .page-wrapper { padding-top: 100px; padding-bottom: 60px; }
     .details-layout { display: grid; grid-template-columns: 2fr 1fr; gap: 2.5rem; align-items: flex-start; }
@@ -26,11 +143,12 @@
     .booking-form { margin-top: 20px; }
     .booking-form .form-group { margin-bottom: 15px; }
     .booking-form label { display: block; margin-bottom: 5px; font-weight: 600; }
-    .booking-form input, .booking-form textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; }
+    .booking-form input, .booking-form textarea, .booking-form select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-family: inherit; }
     .booking-form textarea { resize: vertical; min-height: 80px; }
     .alert { padding: 10px; margin-bottom: 15px; border-radius: 5px; }
     .alert-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
     .alert-error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+    .alert-info { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
     
     
     .booking-box .btn-primary:hover {
@@ -113,20 +231,6 @@ a:hover { color: #16a085; }
     background-color: #2c3e50 !important;
     box-shadow: 0 4px 15px rgba(0,0,0,0.06) !important;
 }
-/* .main-header {
-    background-color: transparent;
-    position: fixed;
-    top: 0;
-    width: 100%;
-    z-index: 1000;
-    padding: 20px 0;
-    transition: background-color 0.4s ease, box-shadow 0.4s ease, padding 0.4s ease;
-}
-.main-header.scrolled {
-    background-color: var(--primary-color);
-    box-shadow: var(--shadow-soft);
-    padding: 15px 0;
-} */
 
 .property-card {
     background-color: var(--background-white); border-radius: var(--border-radius); overflow: hidden;
@@ -139,8 +243,6 @@ a:hover { color: #16a085; }
     padding: 60px 0 20px; 
     color: #ecf0f1;
 }
-
-
 
 .page-header {
     background-color: var(--background-white);
@@ -158,38 +260,6 @@ a:hover { color: #16a085; }
     object-fit: cover;
     border: 2px solid var(--secondary-color);
 }
-
-/* --- Dashboard Page --- */
-.dashboard-layout { display: grid; grid-template-columns: 280px 1fr; min-height: 100vh; }
-.sidebar { background-color: var(--background-white); border-right: 1px solid var(--border-color); padding: 32px; }
-.sidebar-profile { text-align: center; margin-bottom: 32px; }
-.sidebar-profile img { width: 80px; height: 80px; border-radius: 50%; margin-bottom: 12px; }
-.sidebar-profile h3 { font-size: 1.2rem; }
-.sidebar-profile p { font-size: 0.9rem; color: var(--text-medium); margin: 0; }
-
-.sidebar-nav { list-style: none; }
-.sidebar-nav li a {
-    display: flex; align-items: center; gap: 12px; padding: 14px 18px;
-    border-radius: var(--border-radius); color: var(--text-medium); font-weight: 500; margin-bottom: 8px;
-}
-.sidebar-nav li a:hover { background-color: #f8f9fa; color: var(--text-dark); }
-.sidebar-nav li a.active { background-color: var(--secondary-color); color: var(--background-white); font-weight: 600; }
-.sidebar-nav li a i { width: 20px; text-align: center; font-size: 1.1rem; }
-
-.dashboard-content { padding: 48px; background-color: #f8f9fa; }
-.dashboard-content h1 { font-size: 2.5rem; margin-bottom: 0.5rem; }
-.dashboard-content .welcome-message { color: var(--text-medium); margin-bottom: 2.5rem; }
-.section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
-.section-header h2 { margin-bottom: 0; font-size: 1.8rem; }
-.dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; margin-bottom: 48px; }
-
-.info-table { width: 100%; border-collapse: collapse; background-color: var(--background-white); border-radius: var(--border-radius); box-shadow: var(--shadow-soft); overflow: hidden; }
-.info-table thead th { text-align: left; background-color: #f8f9fa; color: var(--text-medium); font-weight: 600; padding: 16px; font-size: 0.9rem; border-bottom: 2px solid var(--border-color); }
-.info-table tbody td { padding: 16px; vertical-align: middle; border-bottom: 1px solid var(--border-color); }
-.info-table tbody tr:last-child td { border-bottom: none; }
-.status-badge { padding: 5px 14px; border-radius: 50px; font-weight: 600; font-size: 0.8rem; }
-.status-pending { background-color: #fef3c7; color: #92400e; }
-.status-accepted { background-color: #d1fae5; color: #065f46; }
 
 /* --- Property Detail Page --- */
 .page-wrapper { padding-top: 80px; } /* Offset for fixed header */
@@ -210,537 +280,273 @@ a:hover { color: #16a085; }
 .amenity-item { background: #f8f9fa; border: 1px solid var(--border-color); border-radius: var(--border-radius); padding: 16px; display: flex; align-items: center; gap: 12px; }
 .booking-box { background: var(--background-white); padding: 32px; border-radius: var(--border-radius); box-shadow: var(--shadow-medium); position: sticky; top: 120px; }
 .booking-box .btn { width: 100%; margin-top: 16px; }
-
-/* --- Chat Page --- */
-.chat-layout { display: grid; grid-template-columns: 350px 1fr; height: calc(100vh - 73px); }
-.chat-sidebar { border-right: 1px solid var(--border-color); display: flex; flex-direction: column; background: var(--background-white); }
-.chat-list { flex-grow: 1; overflow-y: auto; }
-.chat-item { display: flex; align-items: center; gap: 12px; padding: 16px; cursor: pointer; border-bottom: 1px solid var(--border-color); }
-.chat-item:hover { background-color: #f8f9fa; }
-.chat-item.active { background-color: #e8f8f5; border-right: 4px solid var(--secondary-color); }
-.chat-item img { width: 50px; height: 50px; border-radius: 50%; }
-.chat-item h4 { font-size: 1rem; margin: 0; }
-.chat-item p { font-size: 0.9rem; margin: 0; color: var(--text-medium); }
-
-.chat-window { display: flex; flex-direction: column; background-color: #f8f9fa; }
-.chat-header { padding: 16px 24px; background: var(--background-white); border-bottom: 1px solid var(--border-color); font-weight: 600; font-size: 1.2rem; }
-.message-area { flex-grow: 1; padding: 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
-.message-bubble { max-width: 65%; padding: 14px 20px; border-radius: 20px; line-height: 1.5; }
-.message-bubble .timestamp { font-size: 0.8rem; color: var(--text-medium); margin-bottom: 4px; display: block; }
-.sent { background: var(--secondary-color); color: var(--background-white); align-self: flex-end; border-bottom-right-radius: 4px; }
-.sent .timestamp { color: rgba(255,255,255,0.7); }
-.received { background: var(--background-white); color: var(--text-dark); align-self: flex-start; border: 1px solid var(--border-color); border-bottom-left-radius: 4px; }
-.message-input-form { display: flex; align-items: center; gap: 12px; padding: 16px 24px; background: var(--background-white); border-top: 1px solid var(--border-color); }
-.message-input-form input { flex-grow: 1; padding: 14px; border-radius: 50px; background: #f8f9fa; border: 1px solid var(--border-color); }
-.message-input-form .btn { border-radius: 50%; width: 52px; height: 52px; padding: 0; font-size: 1.2rem; }
-
-/* --- Search Results Page --- */
-.filter-bar { display: flex; flex-wrap: wrap; gap: 12px; padding: 24px 0; border-bottom: 1px solid var(--border-color); margin-bottom: 24px; }
-.filter-btn { background: var(--background-white); border: 2px solid var(--border-color); padding: 10px 20px; border-radius: 50px; cursor: pointer; font-weight: 500; }
-.results-header { margin-bottom: 24px; font-size: 1.2rem; }
-.results-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 30px; }
-
-
-.pagination { display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 60px; padding-bottom: 60px; }
-.pagination a { padding: 10px 18px; border: 2px solid var(--border-color); border-radius: 50px; color: var(--text-dark); font-weight: 600; }
-.pagination a.active, .pagination a:hover { background: var(--secondary-color); color: var(--background-white); border-color: var(--secondary-color); }
     </style>
 </head>
-    <?php
-            require_once __DIR__ . '/config/database.php';
-            require_once __DIR__ . '/includes/auth.php';
-
-            $property = null;
-            $error = '';
-
-            if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
-                $error = 'Invalid property ID';
-            } else {
-                $id = (int)$_GET['id'];
-                $sql = "SELECT p.*, u.name as landlord_name, u.phone as landlord_phone FROM properties p LEFT JOIN users u ON p.landlord_id = u.id WHERE p.id = ? AND p.status = 'available'";
-                if ($stmt = $conn->prepare($sql)) {
-                    $stmt->bind_param('i', $id);
-                    $stmt->execute();
-                    $result = $stmt->get_result();
-                    $property = $result->fetch_assoc();
-                    $stmt->close();
-                }
-
-                if (!$property) {
-                    $error = 'Property not found or not available';
-                }
-            }
-
-            if ($error): ?>
-                <div class="alert alert-error"><?php echo htmlspecialchars($error); ?></div>
-            <?php else: ?>
 <body>
-    
-    
-<!-- Header Placeholder -->
-    <div id="header-placeholder"></div>
 
+<?php include 'header.php'; ?>
 
-            <div style="max-width:1200px; margin:40px auto 40px auto; padding:0 24px;">
-    <main class="page-wrapper">
-        <section class="detail-section container">
-
-              
-
-<div class="detail-layout" style="display: flex; gap: 2.5rem; align-items: flex-start; max-width: 1100px; margin: 0 auto;">
-    
-    <div style="flex:2 1 0; min-width:0;">
-        
-         <div class="property-images" style="width:100%; max-width:100%; margin:0 auto 2.5rem auto;">
-            <div class="main-image-box" style="width:100%; max-width:1100px; margin:0 auto; aspect-ratio: 16/7; border-radius:16px; overflow:hidden; box-shadow:0 6px 32px rgba(44,62,80,0.13); position:relative;">
-                <img id="mainPropertyImage"
-                     src="<?php echo htmlspecialchars($property['main_image'] ?: 'images/default-property.jpg'); ?>"
-                     alt="<?php echo htmlspecialchars($property['title']); ?>"
-                     style="width:100%; height:100%; object-fit:cover; transition:0.2s; cursor: zoom-in;">
-                
-                <span id="imgCounter" style="position:absolute; bottom:18px; right:34px; background:rgba(0,0,0,0.55); color:#fff; font-size:1.08rem; border-radius:7px; padding:3px 13px;">1 / 5</span>
-            </div>
-
-            
-            <div class="thumbnail-controls" style="display: flex; align-items: center; justify-content: center; gap: 1rem; max-width: 1100px; margin: 1rem auto 0 auto;">
-    <!-- Left Arrow -->
-    <button id="imgPrevBtn" type="button"
-        style="background: #f0f9f7; border: 1px solid var(--border-color); border-radius:50%; width:44px; height:44px; display:flex; align-items:center; justify-content:center; box-shadow:var(--shadow-soft); font-size:1.2rem; cursor:pointer; flex-shrink: 0; transition: all 0.3s ease;"
-        onmouseover="this.style.borderColor='#0e7c68'; this.style.transform='scale(1.1)'; this.style.boxShadow='0 4px 12px rgba(22, 160, 133, 0.3)'; this.querySelector('i').style.color='#0e7c68';"
-        onmouseout="this.style.borderColor='#f0f9f7'; this.style.transform='scale(1)'; this.style.boxShadow='0 4px 15px rgba(0,0,0,0.06)'; this.querySelector('i').style.color='#16a085';">
-        <i class="fas fa-chevron-left" style="color:#16a085; transition: color 0.3s ease;"></i>
-    </button>
-
-    <div class="thumbnail-grid" style="display:grid; grid-template-columns: repeat(5, 1fr); gap:1rem; width:100%;">
-        <!-- Thumbnails will be generated by JavaScript -->
-    </div>
-
-    <!-- Right Arrow -->
-    <button id="imgNextBtn" type="button"
-        style="background: #f0f9f7; border: 1px solid var(--border-color); border-radius:50%; width:44px; height:44px; display:flex; align-items:center; justify-content:center; box-shadow:var(--shadow-soft); font-size:1.2rem; cursor:pointer; flex-shrink: 0; transition: all 0.3s ease;"
-        onmouseover="this.style.borderColor='#0e7c68'; this.style.transform='scale(1.1)'; this.style.boxShadow='0 4px 12px rgba(22, 160, 133, 0.3)'; this.querySelector('i').style.color='#0e7c68';"
-        onmouseout="this.style.borderColor='#f0f9f7'; this.style.transform='scale(1)'; this.style.boxShadow='0 4px 15px rgba(0,0,0,0.06)'; this.querySelector('i').style.color='#16a085';">
-        <i class="fas fa-chevron-right" style="color:#16a085; transition: color 0.3s ease;"></i>
-    </button>
-</div>
-        </div>
-                
-                
-
-    </div>
-    
-    <aside class="booking-box" style="background:#fff; padding:32px 28px; border-radius:16px; box-shadow:0 4px 24px rgba(44,62,80,0.10); position:sticky; top:120px; max-width:340px; min-width:260px; margin-left:auto; flex:1 1 340px;">
-        <h3 style="font-size:2rem; font-weight:700; color:var(--secondary-color); margin-bottom:0.7rem;">৳ <?php echo number_format($property['price']); ?> <span style="font-size:1rem; font-weight:400; color:#888;">/ Month</span></h3>
-        <p style="margin-bottom:1.2rem; color:#555;">Includes all utilities and fees.</p>
-
-        <?php if (isLoggedIn() && $_SESSION['user_role'] === 'tenant'): ?>
-            <div class="booking-form">
-                <h4>Request to Book</h4>
-                <?php
-                // Check if user already has a pending request for this property
-                $user_id = $_SESSION['user_id'];
-                $check_sql = "SELECT id FROM bookings WHERE property_id = ? AND tenant_id = ? AND status = 'pending'";
-                $has_pending = false;
-                if ($check_stmt = $conn->prepare($check_sql)) {
-                    $check_stmt->bind_param('ii', $property['id'], $user_id);
-                    $check_stmt->execute();
-                    $check_stmt->store_result();
-                    $has_pending = $check_stmt->num_rows > 0;
-                    $check_stmt->close();
-                }
-
-                if (isset($_POST['submit_booking'])) {
-                    if ($has_pending) {
-                        echo '<div class="alert alert-error">You already have a pending booking request for this property.</div>';
-                    } else {
-                        $move_in_date = $_POST['move_in_date'];
-                        $duration = (int)$_POST['duration'];
-                        $message = trim($_POST['message']);
-
-                        $insert_sql = "INSERT INTO bookings (property_id, tenant_id, landlord_id, move_in_date, duration_months, message, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', NOW())";
-                        if ($insert_stmt = $conn->prepare($insert_sql)) {
-                            $insert_stmt->bind_param('iiisis', $property['id'], $user_id, $property['landlord_id'], $move_in_date, $duration, $message);
-                            if ($insert_stmt->execute()) {
-                                echo '<div class="alert alert-success">Booking request submitted successfully! The landlord will contact you soon.</div>';
-                                $has_pending = true;
-                            } else {
-                                echo '<div class="alert alert-error">Error submitting booking request. Please try again.</div>';
-                            }
-                            $insert_stmt->close();
-                        }
-                    }
-                }
-
-                if (!$has_pending): ?>
-                    <form method="POST">
-                        <div class="form-group">
-                            <label for="move_in_date">Preferred Move-in Date:</label>
-                            <input type="date" id="move_in_date" name="move_in_date" required min="<?php echo date('Y-m-d'); ?>">
+<div class="page-wrapper">
+    <main class="container">
+        <?php if ($error): ?>
+            <div class="alert alert-danger" style="text-align: center; font-size: 1.2rem;"><?php echo htmlspecialchars($error); ?></div>
+        <?php elseif ($property): ?>
+            <section class="detail-section">
+                <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 2.5rem; align-items: flex-start;">
+                    
+                    <!-- Image Gallery Column -->
+                    <div>
+                        <div class="main-image" style="cursor: zoom-in; position: relative; margin-bottom: 1rem;">
+                            <button id="mainImgPrevBtn" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); background: rgba(255,255,255,0.9); border: 1px solid var(--border-color); border-radius: 50%; width: 40px; height: 40px; cursor: pointer; z-index: 10; font-size: 1.3rem; box-shadow: var(--shadow-soft); display: none; align-items: center; justify-content: center;"><i class="fas fa-chevron-left"></i></button>
+                            <img id="mainPropertyImage" src="<?php echo htmlspecialchars(!empty($property_images[0]['image_path']) ? $property_images[0]['image_path'] : 'img/default-property.jpg'); ?>" alt="Main property view" title="Click to zoom" style="width: 100%; height: auto; object-fit: cover; border-radius: var(--border-radius);">
+                            <button id="mainImgNextBtn" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: rgba(255,255,255,0.9); border: 1px solid var(--border-color); border-radius: 50%; width: 40px; height: 40px; cursor: pointer; z-index: 10; font-size: 1.3rem; box-shadow: var(--shadow-soft); display: none; align-items: center; justify-content: center;"><i class="fas fa-chevron-right"></i></button>
+                            <div id="imgCounter" style="position: absolute; bottom: 16px; right: 16px; background: rgba(0,0,0,0.6); color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.9rem; font-weight: 500;">1 / <?php echo count($property_images); ?></div>
                         </div>
-                        <div class="form-group">
-                            <label for="duration">Duration (months):</label>
-                            <input type="number" id="duration" name="duration" required min="1" max="24" value="12">
+                        
+                        <?php if (count($property_images) > 1): ?>
+                        <div class="thumbnail-wrapper" style="position: relative; padding: 0 40px;">
+                             <button id="imgPrevBtn" style="position: absolute; left: 0; top: 50%; transform: translateY(-50%); background: #fff; border: 1px solid var(--border-color); border-radius: 50%; width: 36px; height: 36px; cursor: pointer; z-index: 10; font-size: 1.2rem; box-shadow: var(--shadow-soft);"><i class="fas fa-chevron-left"></i></button>
+                            <div class="thumbnail-grid" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 1rem; overflow: hidden;">
+                                <?php foreach ($property_images as $index => $img): ?>
+                                    <img src="<?php echo htmlspecialchars($img['image_path']); ?>" alt="Property thumbnail <?php echo $index + 1; ?>" data-index="<?php echo $index; ?>" class="thumb-img" style="width: 100%; height: 80px; object-fit: cover; border-radius: 8px; cursor: pointer; border: 2px solid transparent; transition: border-color 0.3s ease;">
+                                <?php endforeach; ?>
+                            </div>
+                            <button id="imgNextBtn" style="position: absolute; right: 0; top: 50%; transform: translateY(-50%); background: #fff; border: 1px solid var(--border-color); border-radius: 50%; width: 36px; height: 36px; cursor: pointer; z-index: 10; font-size: 1.2rem; box-shadow: var(--shadow-soft);"><i class="fas fa-chevron-right"></i></button>
                         </div>
-                        <div class="form-group">
-                            <label for="message">Message to Landlord:</label>
-                            <textarea id="message" name="message" placeholder="Tell the landlord why you're interested in this property..."></textarea>
-                        </div>
-                        <button type="submit" name="submit_booking" class="btn btn-primary" style="width:100%;">Submit Booking Request</button>
-                    </form>
-                <?php else: ?>
-                    <div class="alert alert-success">You have a pending booking request for this property.</div>
-                <?php endif; ?>
-            </div>
-        <?php elseif (isLoggedIn() && $_SESSION['user_role'] === 'landlord'): ?>
-            <div class="alert alert-error">Landlords cannot book properties. This is your property.</div>
-        <?php else: ?>
-            <a href="login.php" class="btn btn-primary" style="width:100%; margin-bottom:1.1rem;">Login to Book</a>
-            <p style="text-align: center; color: #666; font-size: 0.9rem;">Only registered tenants can request bookings.</p>
-        <?php endif; ?>
+                        <?php endif; ?>
+                    </div>
 
-        <div style="margin-top:1.2rem; color:#888; font-size:0.97rem;">
-            <i class="fas fa-phone-alt" style="color:var(--secondary-color);"></i>
-            For direct queries:<br>
-            <a href="tel:<?php echo htmlspecialchars($property['landlord_phone'] ?: '+880170000000'); ?>" class="btn btn-secondary" style="width:100%; margin-top: 10px;">Call Landlord</a>
-        </div>
-    </aside>
-</div>
+                    <!-- Booking Box Column -->
+                    <aside class="booking-box">
+                        <h3>৳<?php echo number_format($property['price_per_month']); ?> / Month</h3>
+                        <p style="margin-bottom: 1.5rem;">Includes all utilities and fees.</p>
 
+                        <?php if (isLoggedIn() && $_SESSION['role'] === 'tenant'): ?>
+                            <a href="tel:<?php echo htmlspecialchars($property['landlord_phone'] ?? '+880170000000'); ?>" class="btn btn-primary">Request to Book</a>
+                            <p style="font-size: 0.9rem; color: var(--text-medium); text-align: center; margin-top: 1rem; margin-bottom: 0.5rem;">For direct booking or queries:</p>
+                            <a href="tel:<?php echo htmlspecialchars($property['landlord_phone'] ?? '+880170000000'); ?>" class="btn btn-secondary">Call Landlord</a>
+                        <?php elseif (isLoggedIn() && ($_SESSION['role'] === 'landlord' || $_SESSION['role'] === 'admin')): ?>
+                             <p style="font-size: 0.9rem; color: var(--text-medium); text-align: center; margin-top: 1rem;">You are logged in as a landlord/admin and cannot book properties.</p>
+                             <a href="tel:<?php echo htmlspecialchars($property['landlord_phone'] ?? '+880170000000'); ?>" class="btn btn-secondary">Call Landlord</a>
+                        <?php else: ?>
+                            <a href="login.php?redirect=<?php echo urlencode($_SERVER['REQUEST_URI']); ?>" class="btn btn-primary">Login to Book</a>
+                             <p style="font-size: 0.9rem; color: var(--text-medium); text-align: center; margin-top: 1rem; margin-bottom: 0.5rem;">For direct booking or queries:</p>
+                            <a href="tel:<?php echo htmlspecialchars($property['landlord_phone'] ?? '+880170000000'); ?>" class="btn btn-secondary">Call Landlord</a>
+                        <?php endif; ?>
+                    </aside>
+                </div>
 
-           
-
-           
-               <div class="detail-content" style="flex:2 1 500px;">
+                <div class="detail-content" style="margin-top: 2.5rem;">
                     <h1><?php echo htmlspecialchars($property['title']); ?></h1>
-                    <p class="location"><i class="fas fa-map-marker-alt"></i> <?php echo htmlspecialchars($property['address'] . ($property['city'] ? ', ' . $property['city'] : '')); ?></p>
-                    <!-- <div class="detail-specs" style="margin-bottom: 1.2rem;">
-                        <span><i class="fas fa-bed"></i> 3 Beds</span>
-                        <span><i class="fas fa-bath"></i> 3 Baths</span>
-                        <span><i class="fas fa-ruler-combined"></i> 1800 sqft</span>
-                    </div> -->
+                    <p class="location" style="margin-bottom: 2rem;"><i class="fas fa-map-marker-alt"></i> <?php echo htmlspecialchars($property['address'] . ', ' . $property['city']); ?></p>
                     
-                
-                    <!-- <div class="basic-info-box" style="background:#f8fafc; border-radius:12px; box-shadow:0 2px 8px rgba(44,62,80,0.07); padding:1.2rem 1.5rem; margin-bottom:2rem; margin-top:1.2rem;"> -->
-                        <h2>Basic Information</h2>
-                         <div style="display:grid; grid-template-columns: repeat(5, 1fr); gap:1.1rem 1.5rem; font-size:1.05rem;">
-        <!-- 10 items, 5 per row -->
-        <div style="display:flex;align-items:center;gap:7px;"><i class="fas fa-building" style="color:#16a085;"></i><?php echo htmlspecialchars(ucfirst($property['property_type'])); ?></div>
-        <div style="display:flex;align-items:center;gap:7px;"><i class="fas fa-users" style="color:#16a085;"></i><?php echo htmlspecialchars($property['suitable_for'] ?: 'Family'); ?></div>
-        <div style="display:flex;align-items:center;gap:7px;"><i class="fas fa-vector-square" style="color:#16a085;"></i><?php echo (int)$property['area_sqft']; ?> sqft</div>
-        <div style="display:flex;align-items:center;gap:7px;"><i class="fas fa-layer-group" style="color:#16a085;"></i><?php echo (int)$property['floor']; ?>th Floor</div>
-        <div style="display:flex;align-items:center;gap:7px;"><i class="fas fa-bed" style="color:#16a085;"></i><?php echo (int)$property['bedrooms']; ?> Beds</div>
-        <div style="display:flex;align-items:center;gap:7px;"><i class="fas fa-bath" style="color:#16a085;"></i><?php echo (int)$property['bathrooms']; ?> Baths</div>
-        <div style="display:flex;align-items:center;gap:7px;"><i class="fas fa-door-open" style="color:#16a085;"></i><?php echo (int)$property['balconies']; ?> Balcony</div>
-        <div style="display:flex;align-items:center;gap:7px;"><i class="fas fa-compass" style="color:#16a085;"></i><?php echo htmlspecialchars($property['facing'] ?: 'South'); ?> Facing</div>
-        <div style="display:flex;align-items:center;gap:7px;"><i class="fas fa-calendar-check" style="color:#16a085;"></i>Available: <?php echo htmlspecialchars($property['available_from'] ?: 'Immediate'); ?></div>
-        <div style="display:flex;align-items:center;gap:7px;"><i class="fas fa-calendar-alt" style="color:#16a085;"></i>Posted: <?php echo date('d M Y', strtotime($property['created_at'])); ?></div>
-    </div>
-</div>
-                    <!-- </div> -->
-                    
-                    
+                    <h2 style="font-size: 1.6rem; margin-bottom: 1.5rem;">Basic Information</h2>
+                    <div class="info-grid" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1.5rem; padding: 1.5rem; margin-bottom: 3rem;">
+                        <div class="info-grid-item"><span><i class="fas fa-building"></i> <?php echo htmlspecialchars(ucfirst($property['property_type'])); ?></span></div>
+                        <div class="info-grid-item"><span><i class="fas fa-users"></i> Family</span></div>
+                        <div class="info-grid-item"><span><i class="fas fa-ruler-combined"></i> <?php echo htmlspecialchars($property['area_sqft']); ?> sqft</span></div>
+                        <div class="info-grid-item"><span><i class="fas fa-layer-group"></i> 5th Floor</span></div>
+                        <div class="info-grid-item"><span><i class="fas fa-bed"></i> <?php echo htmlspecialchars($property['bedrooms']); ?> Beds</span></div>
+                        <div class="info-grid-item"><span><i class="fas fa-bath"></i> <?php echo htmlspecialchars($property['bathrooms']); ?> Baths</span></div>
+                        <div class="info-grid-item"><span><i class="fas fa-door-open"></i> 2 Balcony</span></div>
+                        <div class="info-grid-item"><span><i class="fas fa-compass"></i> South Facing</span></div>
+                        <div class="info-grid-item"><span><i class="fas fa-calendar-check"></i> Available: <?php echo date('j M Y', strtotime($property['available_from'])); ?></span></div>
+                        <div class="info-grid-item"><span><i class="fas fa-calendar-alt"></i> Posted: <?php echo date('j M Y', strtotime($property['created_at'])); ?></span></div>
+                    </div>
+
                     <h2>About this place</h2>
-                    <p><?php echo nl2br(htmlspecialchars($property['description'] ?: 'No description available.')); ?></p>
-                    
-                    
-<h2>What this place offers</h2>
-<div class="amenities-grid" style="display:grid; grid-template-columns: repeat(5, 1fr); gap:1rem 1.5rem; margin-bottom:2rem;">
-    <?php
-    $amenities = json_decode($property['amenities'], true) ?: [];
-    $default_amenities = ['WiFi', 'Parking', 'Security', 'Generator', 'Elevator'];
-    $all_amenities = array_unique(array_merge($amenities, $default_amenities));
+                    <p><?php echo nl2br(htmlspecialchars($property['description'])); ?></p>
 
-    foreach ($all_amenities as $amenity): ?>
-        <div class="amenity-item"><i class="fas fa-check"></i> <?php echo htmlspecialchars($amenity); ?></div>
-    <?php endforeach; ?>
-</div>
+                    <?php if (!empty($property_amenities)): ?>
+                    <h2>What this place offers</h2>
+                    <div class="amenities-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+                        <?php foreach ($property_amenities as $amenity): ?>
+                            <div class="amenity-item" style="background: var(--background-white); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px 16px; justify-content: flex-start;"><i class="fas fa-check-circle" style="color: var(--secondary-color);"></i> <?php echo htmlspecialchars(ucfirst($amenity)); ?></div>
+                        <?php endforeach; ?>
+                    </div>
+                    <?php endif; ?>
 
-
-                    <!-- Location Section (at the end) -->
-                    <h2 style="margin-top:2.2rem;">Location</h2>
+                    <!-- Location Section -->
+                    <h2 style="margin-top: 2rem;">Location</h2>
                     <div style="margin-bottom: 1.5rem;">
                         <iframe
-                            src="https://www.google.com/maps?q=<?php echo urlencode($property['address'] . ', ' . $property['city']); ?>&output=embed"
+                            src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3651.9084832050435!2d90.39225931544305!3d23.750901084587947!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3755b8b087026b81%3A0x8fa563bbdd5904c2!2sDhaka%2C%20Bangladesh!5e0!3m2!1sen!2sus!4v1234567890123!5m2!1sen!2sus"
                             width="100%"
-                            height="260"
-                            style="border:1px solid #ecf0f1; border-radius:12px;"
+                            height="350"
+                            style="border:0; border-radius:12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);"
                             allowfullscreen=""
                             loading="lazy"
                             referrerpolicy="no-referrer-when-downgrade">
                         </iframe>
-                        <div style="margin-top:0.7rem; color:var(--text-medium); font-size:1rem;">
-                            <i class="fas fa-map-marker-alt" style="color:var(--secondary-color);"></i>
-                            <?php echo htmlspecialchars($property['address'] . ($property['city'] ? ', ' . $property['city'] : '')); ?>
+                        <div style="margin-top: 0.7rem; color: #7f8c8d; font-size: 1rem;">
+                            <i class="fas fa-map-marker-alt" style="color: #16a085; margin-right: 6px;"></i>
+                            <strong><?php echo htmlspecialchars($property['address'] . ', ' . $property['city']); ?></strong>
                         </div>
                     </div>
                     <!-- End Location Section -->
                 </div>
+            </section>
+        <?php endif; ?>
 
-                <!-- <aside class="booking-box">
-                    <h3>৳ 65,000 / Month</h3>
-                    <p>Includes all utilities and fees.</p>
-                    <a href="#" class="btn btn-primary">Request to Book</a>
-                    <div style="margin-top:1.2rem; color:#888; font-size:0.97rem;">
-                            <i class="fas fa-phone-alt" style="color:var(--secondary-color);"></i>
-                            For direct booking or queries: <br>
-                        </div>
-                    <a href="tel:+880170000000" class="btn btn-secondary">Call Landlord</a>
-                    
-                </aside>  -->
-            </div>
-        
-     <!-- ...existing code... -->
-
-    <a href="messages.php"
-   class="chat-float-btn"
-   title="Chat with Landlord"
-   target="_blank"
-   style="
-        position: fixed;
-        bottom: 100px;  /* Changed from 32px to 100px */
-        right: 30px;
-        z-index: 9999;
-        background: #fff;
-        color: #16a085;
-        border-radius: 50%;
-        width: 62px;
-        height: 62px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        box-shadow: 0 6px 24px rgba(22,160,133,0.18);
-        font-size: 2.1rem;
-        border: 2.5px solid #16a085;
-        transition: background 0.2s, color 0.2s, box-shadow 0.2s;
-        text-decoration: none;
-   "
-   onmouseover="this.style.background='#16a085';this.style.color='#fff';"
-   onmouseout="this.style.background='#fff';this.style.color='#16a085';"
->
-    <i class="fas fa-comments"></i>
-</a>
-
-
-        
-        <!-- Similar Property Section -->
-        <section class="similar-properties container" style="margin-bottom: 60px;">
-            <h2 class="section-title" style="font-size:2rem; margin-bottom: 1.5rem; text-align:left;">Similar Properties</h2>
-            <div class="property-grid">
+        <?php if (!empty($similar_properties)): ?>
+        <section class="detail-section" style="border-top: 1px solid var(--border-color); padding-top: 60px;">
+            <h2 class="section-title">Similar Properties in <?php echo htmlspecialchars($property['city']); ?></h2>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 30px;">
+                <?php foreach ($similar_properties as $similar): ?>
                 <div class="property-card">
-                    <div class="card-image">
-                        <img src="https://images.pexels.com/photos/271624/pexels-photo-271624.jpeg?auto=compress&cs=tinysrgb&w=600" alt="Property 1">
+                    <div style="position: relative; overflow: hidden; border-radius: var(--border-radius) var(--border-radius) 0 0;">
+                        <img src="<?php echo htmlspecialchars($similar['main_image'] ? $similar['main_image'] : 'img/default-property.jpg'); ?>" alt="<?php echo htmlspecialchars($similar['title']); ?>" style="width: 100%; height: 220px; object-fit: cover;">
                     </div>
-                    <div class="card-content">
-                        <h3>Modern Apartment in Dhanmondi</h3>
-                        <p class="address"><i class="fas fa-map-marker-alt"></i> Dhanmondi, Dhaka</p>
-                        <div class="property-specs">
-                            <span><i class="fas fa-bed"></i> 2 Beds</span>
-                            <span><i class="fas fa-bath"></i> 2 Baths</span>
-                            <span><i class="fas fa-ruler-combined"></i> 1200 sqft</span>
+                    <div style="padding: 20px;">
+                        <h3 style="font-size: 1.3rem; margin-bottom: 8px;">
+                            <a href="property-details.php?id=<?php echo $similar['property_id']; ?>" style="color: var(--text-dark);"><?php echo htmlspecialchars($similar['title']); ?></a>
+                        </h3>
+                        <p style="color: var(--text-medium); margin-bottom: 12px;">
+                            <i class="fas fa-map-marker-alt"></i> <?php echo htmlspecialchars($similar['address'] . ', ' . $similar['city']); ?>
+                        </p>
+                        <div style="display: flex; gap: 16px; margin-bottom: 12px; font-size: 0.95rem; color: var(--text-medium);">
+                            <span><i class="fas fa-bed"></i> <?php echo $similar['bedrooms']; ?></span>
+                            <span><i class="fas fa-bath"></i> <?php echo $similar['bathrooms']; ?></span>
+                            <span><i class="fas fa-ruler-combined"></i> <?php echo $similar['area_sqft']; ?></span>
                         </div>
-                        <div style="font-weight:600; color:var(--secondary-color); margin-bottom:8px;">৳ 25,000 / Month</div>
-                        <a href="#" class="btn btn-secondary" style="padding:8px 20px; font-size:0.95rem;">View Details</a>
+                        <div style="font-size: 1.4rem; font-weight: 600; color: var(--secondary-color); margin-bottom: 12px;">
+                            ৳<?php echo number_format($similar['price_per_month']); ?> <span style="font-size: 0.9rem; font-weight: 400;">/month</span>
+                        </div>
+                        <a href="property-details.php?id=<?php echo $similar['property_id']; ?>" class="btn btn-secondary" style="width: 100%; padding: 10px;">View Details</a>
                     </div>
                 </div>
-                <div class="property-card">
-                    <div class="card-image">
-                        <img src="https://images.pexels.com/photos/276724/pexels-photo-276724.jpeg?auto=compress&cs=tinysrgb&w=600" alt="Property 2">
-                    </div>
-                    <div class="card-content">
-                        <h3>Cozy Studio in Mohammadpur</h3>
-                        <p class="address"><i class="fas fa-map-marker-alt"></i> Mohammadpur, Dhaka</p>
-                        <div class="property-specs">
-                            <span><i class="fas fa-bed"></i> 1 Bed</span>
-                            <span><i class="fas fa-bath"></i> 1 Bath</span>
-                            <span><i class="fas fa-ruler-combined"></i> 650 sqft</span>
-                        </div>
-                        <div style="font-weight:600; color:var(--secondary-color); margin-bottom:8px;">৳ 12,000 / Month</div>
-                        <a href="#" class="btn btn-secondary" style="padding:8px 20px; font-size:0.95rem;">View Details</a>
-                    </div>
-                </div>
-                <div class="property-card">
-                    <div class="card-image">
-                        <img src="https://images.pexels.com/photos/5998120/pexels-photo-5998120.jpeg?auto=compress&cs=tinysrgb&w=600" alt="Property 3">
-                    </div>
-                    <div class="card-content">
-                        <h3>Family Flat in Mirpur</h3>
-                        <p class="address"><i class="fas fa-map-marker-alt"></i> Mirpur, Dhaka</p>
-                        <div class="property-specs">
-                            <span><i class="fas fa-bed"></i> 3 Beds</span>
-                            <span><i class="fas fa-bath"></i> 2 Baths</span>
-                            <span><i class="fas fa-ruler-combined"></i> 1450 sqft</span>
-                        </div>
-                        <div style="font-weight:600; color:var(--secondary-color); margin-bottom:8px;">৳ 18,500 / Month</div>
-                        <a href="#" class="btn btn-secondary" style="padding:8px 20px; font-size:0.95rem;">View Details</a>
-                    </div>
-                </div>
-                <div class="property-card">
-                    <div class="card-image">
-                        <img src="https://images.pexels.com/photos/323780/pexels-photo-323780.jpeg?auto=compress&cs=tinysrgb&w=600" alt="Property 4">
-                    </div>
-                    <div class="card-content">
-                        <h3>Luxury House in Bashundhara</h3>
-                        <p class="address"><i class="fas fa-map-marker-alt"></i> Bashundhara, Dhaka</p>
-                        <div class="property-specs">
-                            <span><i class="fas fa-bed"></i> 3 Beds</span>
-                            <span><i class="fas fa-bath"></i> 3 Baths</span>
-                            <span><i class="fas fa-ruler-combined"></i> 1800 sqft</span>
-                        </div>
-                        <div style="font-weight:600; color:var(--secondary-color); margin-bottom:8px;">৳ 40,000 / Month</div>
-                        <a href="#" class="btn btn-secondary" style="padding:8px 20px; font-size:0.95rem;">View Details</a>
-                    </div>
-                </div>
-                <div class="property-card">
-                    <div class="card-image">
-                        <img src="https://images.pexels.com/photos/210617/pexels-photo-210617.jpeg?auto=compress&cs=tinysrgb&w=600" alt="Property 5">
-                    </div>
-                    <div class="card-content">
-                        <h3>Single Room in Uttara</h3>
-                        <p class="address"><i class="fas fa-map-marker-alt"></i> Uttara, Dhaka</p>
-                        <div class="property-specs">
-                            <span><i class="fas fa-bed"></i> 1 Bed</span>
-                            <span><i class="fas fa-bath"></i> 1 Bath</span>
-                            <span><i class="fas fa-ruler-combined"></i> 400 sqft</span>
-                        </div>
-                        <div style="font-weight:600; color:var(--secondary-color); margin-bottom:8px;">৳ 8,000 / Month</div>
-                        <a href="#" class="btn btn-secondary" style="padding:8px 20px; font-size:0.95rem;">View Details</a>
-                    </div>
-                </div>
-                <div class="property-card">
-                    <div class="card-image">
-                        <img src="https://images.pexels.com/photos/1643383/pexels-photo-1643383.jpeg?auto=compress&cs=tinysrgb&w=600" alt="Property 6">
-                    </div>
-                    <div class="card-content">
-                        <h3>Spacious Duplex in Gulshan</h3>
-                        <p class="address"><i class="fas fa-map-marker-alt"></i> Gulshan, Dhaka</p>
-                        <div class="property-specs">
-                            <span><i class="fas fa-bed"></i> 4 Beds</span>
-                            <span><i class="fas fa-bath"></i> 4 Baths</span>
-                            <span><i class="fas fa-ruler-combined"></i> 2500 sqft</span>
-                        </div>
-                        <div style="font-weight:600; color:var(--secondary-color); margin-bottom:8px;">৳ 85,000 / Month</div>
-                        <a href="#" class="btn btn-secondary" style="padding:8px 20px; font-size:0.95rem;">View Details</a>
-                    </div>
-                </div>
+                <?php endforeach; ?>
             </div>
         </section>
+        <?php endif; ?>
     </main>
-    </div>
-            <?php endif; ?>
+</div>
 
-    <!-- Footer Placeholder -->
-    <div id="footer-placeholder"></div>
+<?php include 'footer.php'; ?>
 
-    <!-- Scripts -->
-    <script src="js/loader.js"></script>
-
-    
-
-   <script>
+<script>
 document.addEventListener('DOMContentLoaded', function() {
-    const images = [
-        { thumb: "https://images.pexels.com/photos/1643383/pexels-photo-1643383.jpeg?auto=compress&cs=tinysrgb&w=400", full: "https://images.pexels.com/photos/1643383/pexels-photo-1643383.jpeg?auto=compress&cs=tinysrgb&w=1600" },
-        { thumb: "https://images.pexels.com/photos/271624/pexels-photo-271624.jpeg?auto=compress&cs=tinysrgb&w=400", full: "https://images.pexels.com/photos/271624/pexels-photo-271624.jpeg?auto=compress&cs=tinysrgb&w=1600" },
-        { thumb: "https://images.pexels.com/photos/5998120/pexels-photo-5998120.jpeg?auto=compress&cs=tinysrgb&w=400", full: "https://images.pexels.com/photos/5998120/pexels-photo-5998120.jpeg?auto=compress&cs=tinysrgb&w=1600" },
-        { thumb: "https://images.pexels.com/photos/210617/pexels-photo-210617.jpeg?auto=compress&cs=tinysrgb&w=400", full: "https://images.pexels.com/photos/210617/pexels-photo-210617.jpeg?auto=compress&cs=tinysrgb&w=1600" },
-        { thumb: "https://images.pexels.com/photos/1571460/pexels-photo-1571460.jpeg?auto=compress&cs=tinysrgb&w=400", full: "https://images.pexels.com/photos/1571460/pexels-photo-1571460.jpeg?auto=compress&cs=tinysrgb&w=1600" }
-    ];
-    let currentImg = 0;
-
     const mainImg = document.getElementById('mainPropertyImage');
+    const thumbImages = document.querySelectorAll('.thumb-img');
     const imgCounter = document.getElementById('imgCounter');
+    const prevBtn = document.getElementById('imgPrevBtn');
+    const nextBtn = document.getElementById('imgNextBtn');
+    const mainPrevBtn = document.getElementById('mainImgPrevBtn');
+    const mainNextBtn = document.getElementById('mainImgNextBtn');
     const thumbnailGrid = document.querySelector('.thumbnail-grid');
 
-    // Clear any existing thumbnails
-    thumbnailGrid.innerHTML = '';
+    let currentIndex = 0;
+    const totalImages = thumbImages.length;
+    const visibleThumbs = 5;
+    let firstVisibleThumb = 0;
 
-    // Store all thumbnail boxes in an array for easy reference
-    const thumbBoxes = [];
+    function updateGallery(newIndex, isThumbnailClick = false) {
+        // Update main image
+        mainImg.src = thumbImages[newIndex].src;
+        currentIndex = newIndex;
 
-    // Create thumbnails
-    images.forEach((img, idx) => {
-        const thumbBox = document.createElement('div');
-        thumbBox.style.cssText = "position:relative; border-radius:8px; overflow:hidden; aspect-ratio:16/10; cursor:pointer; transition: all 0.3s ease;";
-        thumbBox.dataset.index = idx;
-        
-        const thumbImg = document.createElement('img');
-        thumbImg.src = img.thumb;
-        thumbImg.className = 'thumb-img';
-        thumbImg.style.cssText = "width:100%; height:100%; object-fit:cover; border:2px solid #eee; border-radius:8px; transition: all 0.3s ease;";
-        
-        const thumbShade = document.createElement('div');
-        thumbShade.className = 'thumb-shade';
-        thumbShade.style.cssText = "position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.6); pointer-events:none; transition: all 0.3s ease;";
+        // Update counter
+        if (imgCounter) {
+            imgCounter.textContent = `${currentIndex + 1} / ${totalImages}`;
+        }
 
-        thumbBox.appendChild(thumbImg);
-        thumbBox.appendChild(thumbShade);
-        
-        // Add hover effects
-        thumbBox.addEventListener('mouseenter', function() {
-            if (idx !== currentImg) {
-                thumbImg.style.transform = 'scale(1.05)';
-                thumbShade.style.background = 'rgba(255,255,255,0.3)';
-                thumbBox.style.transform = 'translateY(-3px)';
+        // Update active thumbnail style
+        thumbImages.forEach((thumb, idx) => {
+            if (idx === currentIndex) {
+                thumb.style.borderColor = 'var(--secondary-color)';
+                thumb.style.opacity = '1';
+            } else {
+                thumb.style.borderColor = 'transparent';
+                thumb.style.opacity = '0.7';
             }
         });
-        
-        thumbBox.addEventListener('mouseleave', function() {
-            if (idx !== currentImg) {
-                thumbImg.style.transform = 'scale(1)';
-                thumbShade.style.background = 'rgba(255,255,255,0.6)';
-                thumbBox.style.transform = 'translateY(0)';
+
+        // Scroll thumbnail into view if not a thumbnail click
+        if (!isThumbnailClick) {
+            if (currentIndex < firstVisibleThumb || currentIndex >= firstVisibleThumb + visibleThumbs) {
+                firstVisibleThumb = Math.max(0, Math.min(currentIndex - Math.floor(visibleThumbs / 2), totalImages - visibleThumbs));
+                updateThumbnailVisibility();
+            }
+        }
+    }
+
+    function updateThumbnailVisibility() {
+        thumbImages.forEach((thumb, idx) => {
+            if (idx >= firstVisibleThumb && idx < firstVisibleThumb + visibleThumbs) {
+                thumb.style.display = 'block';
+            } else {
+                thumb.style.display = 'none';
             }
         });
-        
-        // Add click event to the box
-        thumbBox.addEventListener('click', function() {
-            updateGallery(idx);
+        if(prevBtn) prevBtn.disabled = firstVisibleThumb === 0;
+        if(nextBtn) nextBtn.disabled = firstVisibleThumb >= totalImages - visibleThumbs;
+    }
+
+    // Click handlers for thumbnails
+    thumbImages.forEach((thumb, index) => {
+        thumb.addEventListener('click', function() {
+            updateGallery(index, true);
         });
-        
-        thumbnailGrid.appendChild(thumbBox);
-        thumbBoxes.push(thumbBox);
     });
 
-    function updateGallery(newIndex) {
-        currentImg = newIndex;
-        
-        // Update main image
-        mainImg.src = images[currentImg].full;
-        imgCounter.textContent = `${currentImg + 1} / ${images.length}`;
-
-        // Update all thumbnails
-        thumbBoxes.forEach((box, idx) => {
-            const img = box.querySelector('.thumb-img');
-            const shade = box.querySelector('.thumb-shade');
-            
-            if (idx === currentImg) {
-                img.style.border = "2px solid #16a085";
-                img.style.transform = 'scale(1)';
-                shade.style.display = 'none';
-                box.style.transform = 'translateY(0)';
-            } else {
-                img.style.border = "2px solid #eee";
-                img.style.transform = 'scale(1)';
-                shade.style.display = 'block';
-                shade.style.background = 'rgba(255,255,255,0.6)';
-                box.style.transform = 'translateY(0)';
+    // Click handlers for thumbnail prev/next buttons
+    if (nextBtn) {
+        nextBtn.addEventListener('click', () => {
+            if (firstVisibleThumb < totalImages - visibleThumbs) {
+                firstVisibleThumb++;
+                updateThumbnailVisibility();
             }
         });
     }
 
-    // Initialize with first image
-    updateGallery(0);
+    if (prevBtn) {
+        prevBtn.addEventListener('click', () => {
+            if (firstVisibleThumb > 0) {
+                firstVisibleThumb--;
+                updateThumbnailVisibility();
+            }
+        });
+    }
 
-    // Previous/Next button functionality
-    document.getElementById('imgPrevBtn').onclick = () => {
-        let newIndex = (currentImg - 1 + images.length) % images.length;
-        updateGallery(newIndex);
-    };
-    
-    document.getElementById('imgNextBtn').onclick = () => {
-        let newIndex = (currentImg + 1) % images.length;
-        updateGallery(newIndex);
-    };
+    // Click handlers for main image prev/next buttons
+    if(mainNextBtn) {
+        mainNextBtn.addEventListener('click', () => {
+            let newIndex = (currentIndex + 1) % totalImages;
+            updateGallery(newIndex);
+        });
+    }
+    if(mainPrevBtn) {
+        mainPrevBtn.addEventListener('click', () => {
+            let newIndex = (currentIndex - 1 + totalImages) % totalImages;
+            updateGallery(newIndex);
+        });
+    }
+
+    // Show/hide main image arrows on hover
+    const mainImageContainer = document.querySelector('.main-image');
+    if(mainImageContainer && totalImages > 1) {
+        mainImageContainer.addEventListener('mouseenter', () => {
+            if(mainPrevBtn) mainPrevBtn.style.display = 'flex';
+            if(mainNextBtn) mainNextBtn.style.display = 'flex';
+        });
+        mainImageContainer.addEventListener('mouseleave', () => {
+            if(mainPrevBtn) mainPrevBtn.style.display = 'none';
+            if(mainNextBtn) mainNextBtn.style.display = 'none';
+        });
+    }
+
+
+    // Initial setup
+    if (totalImages > 0) {
+        updateGallery(0);
+    }
+    if (totalImages > visibleThumbs) {
+        updateThumbnailVisibility();
+    } else {
+        if(prevBtn) prevBtn.style.display = 'none';
+        if(nextBtn) nextBtn.style.display = 'none';
+    }
+
 
     // Modal gallery when clicking the main image
     mainImg.addEventListener('click', function() {
@@ -773,17 +579,23 @@ document.addEventListener('DOMContentLoaded', function() {
             transition: all 0.3s ease;
         `;
         
-        // Add hover effect to close button
         closeBtn.addEventListener('mouseenter', function() {
             this.style.transform = 'scale(1.2) rotate(90deg)';
         });
         closeBtn.addEventListener('mouseleave', function() {
             this.style.transform = 'scale(1) rotate(0deg)';
         });
-        
-        const prevBtn = document.createElement('button');
-        prevBtn.innerHTML = '<i class="fas fa-chevron-left"></i>';
-        prevBtn.style.cssText = `
+
+        const modalImg = document.createElement('img');
+        modalImg.style.cssText = `
+            max-width: 90vw;
+            max-height: 85vh;
+            object-fit: contain;
+        `;
+
+        const modalPrevBtn = document.createElement('button');
+        modalPrevBtn.innerHTML = '<i class="fas fa-chevron-left"></i>';
+        modalPrevBtn.style.cssText = `
             position: absolute;
             top: 50%;
             left: 30px;
@@ -797,20 +609,13 @@ document.addEventListener('DOMContentLoaded', function() {
             border-radius: 5px;
             transition: all 0.3s ease;
         `;
-        
-        // Add hover effect to prev button
-        prevBtn.addEventListener('mouseenter', function() {
-            this.style.background = 'rgba(22,160,133,0.8)';
-            this.style.transform = 'translateY(-50%) scale(1.1)';
-        });
-        prevBtn.addEventListener('mouseleave', function() {
-            this.style.background = 'rgba(0,0,0,0.3)';
-            this.style.transform = 'translateY(-50%) scale(1)';
-        });
-        
-        const nextBtn = document.createElement('button');
-        nextBtn.innerHTML = '<i class="fas fa-chevron-right"></i>';
-        nextBtn.style.cssText = `
+        modalPrevBtn.addEventListener('mouseenter', function() { this.style.background = 'rgba(22,160,133,0.8)'; });
+        modalPrevBtn.addEventListener('mouseleave', function() { this.style.background = 'rgba(0,0,0,0.3)'; });
+
+
+        const modalNextBtn = document.createElement('button');
+        modalNextBtn.innerHTML = '<i class="fas fa-chevron-right"></i>';
+        modalNextBtn.style.cssText = `
             position: absolute;
             top: 50%;
             right: 30px;
@@ -824,73 +629,48 @@ document.addEventListener('DOMContentLoaded', function() {
             border-radius: 5px;
             transition: all 0.3s ease;
         `;
-        
-        // Add hover effect to next button
-        nextBtn.addEventListener('mouseenter', function() {
-            this.style.background = 'rgba(22,160,133,0.8)';
-            this.style.transform = 'translateY(-50%) scale(1.1)';
-        });
-        nextBtn.addEventListener('mouseleave', function() {
-            this.style.background = 'rgba(0,0,0,0.3)';
-            this.style.transform = 'translateY(-50%) scale(1)';
-        });
-        
-        const modalImg = document.createElement('img');
-        modalImg.style.cssText = `
-            max-width: 90vw;
-            max-height: 85vh;
-            object-fit: contain;
-        `;
-        
+        modalNextBtn.addEventListener('mouseenter', function() { this.style.background = 'rgba(22,160,133,0.8)'; });
+        modalNextBtn.addEventListener('mouseleave', function() { this.style.background = 'rgba(0,0,0,0.3)'; });
+
         function showImageInModal(index) {
-            modalImg.src = images[index].full;
-            currentImg = index;
+            modalImg.src = thumbImages[index].src;
+            currentIndex = index;
             updateGallery(index);
         }
+
+        modalPrevBtn.addEventListener('click', function() {
+            let newIndex = (currentIndex - 1 + totalImages) % totalImages;
+            showImageInModal(newIndex);
+        });
+
+        modalNextBtn.addEventListener('click', function() {
+            let newIndex = (currentIndex + 1) % totalImages;
+            showImageInModal(newIndex);
+        });
         
-        function closeModal() {
-            document.removeEventListener('keydown', keydownHandler);
+        closeBtn.addEventListener('click', function() {
             document.body.removeChild(modal);
-        }
-        
-        function keydownHandler(e) {
-            if (e.key === 'ArrowLeft') prevBtn.click();
-            else if (e.key === 'ArrowRight') nextBtn.click();
-            else if (e.key === 'Escape') closeModal();
-        }
-        
-        closeBtn.addEventListener('click', closeModal);
-        
-        prevBtn.addEventListener('click', function() {
-            let newIndex = (currentImg - 1 + images.length) % images.length;
-            showImageInModal(newIndex);
         });
         
-        nextBtn.addEventListener('click', function() {
-            let newIndex = (currentImg + 1) % images.length;
-            showImageInModal(newIndex);
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) {
+                document.body.removeChild(modal);
+            }
         });
-        
-        document.addEventListener('keydown', keydownHandler);
         
         modal.appendChild(closeBtn);
-        modal.appendChild(prevBtn);
-        modal.appendChild(nextBtn);
         modal.appendChild(modalImg);
-        
+        modal.appendChild(modalPrevBtn);
+        modal.appendChild(modalNextBtn);
         document.body.appendChild(modal);
-        showImageInModal(currentImg);
+        showImageInModal(currentIndex);
     });
 });
 </script>
-   
-    <!-- <button id="scrollToTopBtn" title="Go to top"><i class="fas fa-arrow-up"></i></button>
-    <script src="https://cdn.jsdelivr.net/npm/swiper@8/swiper-bundle.min.js"></script>
-    
-   
-    <script src="script.js"></script> -->
+
 </body>
 </html>
+
 
 
 
