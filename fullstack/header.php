@@ -4,6 +4,9 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+// Include path helpers
+require_once __DIR__ . '/includes/paths.php';
+
 // Check if user is logged in
 $is_logged_in = isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true;
 $user_name = $is_logged_in ? ($_SESSION['full_name'] ?? $_SESSION['username']) : '';
@@ -38,21 +41,22 @@ if ($is_logged_in && !empty($_SESSION['profile_image'])) {
     }
 }
 
-// Determine dashboard URL based on role
+// Determine dashboard URL based on role using dynamic paths
 $dashboard_url = '';
+$base = getBasePath();
 if ($is_logged_in) {
     switch ($user_role) {
         case 'admin':
-            $dashboard_url = 'admin/index.php';
+            $dashboard_url = $base . '/admin/index.php';
             break;
         case 'landlord':
-            $dashboard_url = 'landlord/index.php';
+            $dashboard_url = $base . '/landlord/index.php';
             break;
         case 'tenant':
-            $dashboard_url = 'tenant/index.php';
+            $dashboard_url = $base . '/tenant/index.php';
             break;
         default:
-            $dashboard_url = 'index.php';
+            $dashboard_url = $base . '/index.php';
     }
 }
 ?>
@@ -342,6 +346,46 @@ if ($is_logged_in) {
     .dashboard-link i {
         font-size: 1rem;
     }
+
+    /* Messages Badge */
+    .messages-badge {
+        position: relative;
+        width: 45px;
+        height: 45px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(255, 255, 255, 0.15);
+        border-radius: 50%;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        color: white;
+        font-size: 1.2rem;
+        text-decoration: none;
+    }
+
+    .messages-badge:hover {
+        background: rgba(255, 255, 255, 0.25);
+        transform: scale(1.1);
+        color: #1abc9c;
+    }
+
+    .messages-badge .badge-count {
+        position: absolute;
+        top: -8px;
+        right: -8px;
+        background: #e74c3c;
+        color: white;
+        border-radius: 50%;
+        width: 24px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.75rem;
+        font-weight: 700;
+        border: 2px solid white;
+    }
     
     @media (max-width: 768px) {
         .nav-links {
@@ -417,10 +461,10 @@ if ($is_logged_in) {
         </ul>
         <div class="nav-actions">
             <?php if ($is_logged_in): ?>
-                <!-- Logged In User -->
-                <a href="<?php echo $dashboard_url; ?>" class="dashboard-link">
-                    <i class="fas fa-th-large"></i>
-                    <span>Dashboard</span>
+                <!-- Messages Quick Access -->
+                <a href="messages.php" class="messages-badge">
+                    <i class="fas fa-envelope"></i>
+                    <span class="badge-count">2</span>
                 </a>
                 <div class="user-profile" id="userProfile">
                     <?php if ($user_image): ?>
@@ -552,7 +596,8 @@ if ($is_logged_in) {
     // Logout Function
     function logout() {
         if (confirm('Are you sure you want to logout?')) {
-            window.location.href = 'api/logout_handler.php';
+            const basePath = window.location.pathname.split('/')[1];
+            window.location.href = '/' + basePath + '/api/logout_handler.php';
         }
     }
 </script>

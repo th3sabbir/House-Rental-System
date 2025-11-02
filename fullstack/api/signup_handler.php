@@ -64,7 +64,9 @@ $result = $auth->register($username, $email, $password, $full_name, $phone, $rol
 
 if ($result['success']) {
     // Registration successful - redirect to login page with success message
-    $result['redirect'] = '/house_rental/login.php?registered=1';
+    // Get base path dynamically
+    $basePath = '/' . explode('/', trim($_SERVER['SCRIPT_NAME'], '/'))[0];
+    $result['redirect'] = $basePath . '/login.php?registered=1';
     $result['message'] = 'Registration successful! Please log in with your credentials.';
 }
 

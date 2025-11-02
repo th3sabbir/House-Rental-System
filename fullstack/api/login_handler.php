@@ -53,16 +53,16 @@ try {
             }
             
             // Determine redirect URL based on role
-            $redirect_url = '/house_rental/index.php';
+            $redirect_url = 'index.php';
             switch ($result['role']) {
                 case 'admin':
-                    $redirect_url = '/house_rental/admin/index.php';
+                    $redirect_url = 'index.php';
                     break;
                 case 'landlord':
-                    $redirect_url = '/house_rental/landlord/index.php';
+                    $redirect_url = 'index.php';
                     break;
                 case 'tenant':
-                    $redirect_url = '/house_rental/tenant/index.php';
+                    $redirect_url = 'index.php';
                     break;
             }
             

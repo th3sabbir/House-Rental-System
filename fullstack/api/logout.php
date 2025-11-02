@@ -20,7 +20,7 @@ $auth->deleteRememberToken(); // Clear remember me token
 $auth->logout();
 
 // Redirect to login page
-header('Location: /house_rental/login.php?logout=success');
+header('Location: ../login.php?logout=success');
 exit();
 ?>
 

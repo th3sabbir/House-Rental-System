@@ -2,6 +2,7 @@
 // Handle logout request
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/paths.php';
 
 $auth = new Auth();
 
@@ -11,9 +12,10 @@ if ($auth->isLoggedIn()) {
 
 $auth->logout();
 
-// Redirect to home page
-redirect('/house_rental/index.php');
+// Redirect to home page using dynamic path
+redirect('../index.php');
 ?>
+
 
 
 
