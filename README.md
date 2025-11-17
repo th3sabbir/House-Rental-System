@@ -6,11 +6,9 @@
 
 Find your perfect rental home in Bangladesh — AmarThikana is a responsive house rental platform built with PHP, MySQL, HTML, CSS, and JavaScript. It provides tenant, landlord, and admin interfaces for listing management, applications, messaging, and analytics.
 
-![AmarThikana Banner](https://via.placeholder.com/800x200/16a085/ffffff?text=AmarThikana+-+Find+Your+Perfect+Rental+Home)
-
 ## 🌐 Live Demo
 
-Experience AmarThikana in action! Visit our live demo at [https://demo.amarthikana.com](https://demo.amarthikana.com)
+Experience AmarThikana in action! Visit our live demo at [https://amarthikana.22web.org](https://amarthikana.22web.org)
 
 ## 🌟 Features
 
