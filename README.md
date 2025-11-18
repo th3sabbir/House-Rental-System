@@ -211,7 +211,7 @@ amarthikana/
 │   └───js/
 │           dashboard.js
 │
-└───uploads/
+└───uploads/            # User-uploaded files
     ├───profiles/
     └───properties/
 ```
