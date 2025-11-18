@@ -51,7 +51,6 @@ Experience AmarThikana in action! Visit our live demo at [https://amarthikana.22
   - Swiper.js for carousels
   - Font Awesome for icons
   - Google Fonts for typography
-- **Server**: Apache/Nginx with mod_rewrite
 - **Security**: PDO/MySQLi with prepared statements
 
 ## Quick GitHub Summary
@@ -85,23 +84,136 @@ Experience AmarThikana in action! Visit our live demo at [https://amarthikana.22
 
 ```
 amarthikana/
-├── admin/              # Admin dashboard pages
-├── api/                # REST API endpoints
-├── config/             # Database and configuration files
-├── css/                # Stylesheets and themes
-├── images/             # Static images and assets
-├── includes/           # PHP includes and utilities
-├── js/                 # JavaScript files
-├── landlord/           # Landlord dashboard pages
-├── logs/               # Application logs
-├── tenant/             # Tenant dashboard pages
-├── uploads/            # User-uploaded files
-├── .htaccess           # Apache configuration
-├── dump.sql            # Database schema
-├── index.php           # Homepage
-├── login.php           # Authentication
-├── README.md           # This file
-└── ...                 # Other PHP pages
+│   .htaccess
+│   about-us.php
+│   contact.php
+│   disclaimer.php
+│   faq.php
+│   footer.php
+│   forget-pass.php
+│   header.php
+│   help-center.php
+│   index.php
+│   login.php
+│   messages.php
+│   privacy-policy.php
+│   properties.php
+│   property-details.php
+│   safety-tips.php
+│   search-result.php
+│   signup.php
+│   terms-of-service.php
+│   test_connection.php
+│   tour-property.php
+│
+├───admin/              # Admin dashboard pages
+│   │   dashboard.php
+│   │   edit-property.php
+│   │   index.php
+│   │   login.php
+│   │   logout.php
+│   │   properties.php
+│   │   tours.php
+│   │   users.php
+│   │
+│   ├───css/
+│   │       admin.css
+│   │
+│   └───js/
+│           admin.js
+│
+├───api/                # REST API endpoints
+│       add_property.php
+│       change_password.php
+│       contact_handler.php
+│       delete_property.php
+│       delete_user.php
+│       edit_property.php
+│       edit_user.php
+│       get_conversations.php
+│       get_messages.php
+│       get_unread_count.php
+│       list_properties.php
+│       list_users.php
+│       load_settings.php
+│       login_handler.php
+│       logout.php
+│       logout_handler.php
+│       properties_handler.php
+│       save_settings.php
+│       send_message.php
+│       signup_handler.php
+│       test_connection.php
+│       toggle_favorite.php
+│       update_profile.php
+│       update_property_status.php
+│       update_tour_status.php
+│       upload_profile_image.php
+│       upload_profile_photo.php
+│
+├───config/             # Database and configuration files
+│       database.php
+│
+├───css/
+│       mobile.css
+│       style.css
+│
+├───database/           # Database files
+│       amarthikana_dump.sql
+│
+├───images/             # Static images and assets
+│       bg.jpg
+│
+├───img/
+│       default-avatar.svg
+│
+├───includes/           # PHP includes and utilities
+│       auth.php
+│       functions.php
+│       paths.php
+│       session_check.php
+│
+├───js/                 # JavaScript files
+│       loader.js
+│       mobile.js
+│       script.js
+│
+├───landlord/           # Landlord dashboard pages
+│   │   add-property.php
+│   │   bookings.php
+│   │   dashboard.php
+│   │   edit-property.php
+│   │   index.php
+│   │   listings.php
+│   │   my-properties.php
+│   │   reviews.php
+│   │   settings.php
+│   │   tours.php
+│   │
+│   ├───css/
+│   │       dashboard.css
+│   │
+│   └───js/
+│           dashboard.js
+│           settings.js
+│
+├───tenant/             # Tenant dashboard pages
+│   │   bookings.php
+│   │   dashboard.php
+│   │   favorites.php
+│   │   index.php
+│   │   settings.php
+│   │   tours.php
+│   │
+│   ├───css/
+│   │       dashboard.css
+│   │
+│   └───js/
+│           dashboard.js
+│
+└───uploads/
+    ├───profiles/
+    └───properties/
 ```
 
 ## 🧪 Testing
